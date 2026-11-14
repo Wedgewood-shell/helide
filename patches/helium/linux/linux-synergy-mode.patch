@@ -91,6 +91,18 @@
        "views/helium/native_frame_materials.cc",
        "views/helium/native_frame_materials.h",
      ]
+--- a/chrome/browser/ui/browser_command_controller.cc
++++ b/chrome/browser/ui/browser_command_controller.cc
+@@ -1139,6 +1139,9 @@
+       break;
+     case IDC_FOCUS_LOCATION:
+       if (!window()->IsLocationBarVisible()) {
++        // Helide: a hidden address bar may have a stand-in, which the window
++        // asks for.
++        window()->SetFocusToLocationBar(/*is_user_initiated=*/true);
+         break;
+       }
+       base::RecordAction(base::UserMetricsAction("Accel_Focus_Location"));
 --- a/chrome/browser/ui/browser_ui_prefs.cc
 +++ b/chrome/browser/ui/browser_ui_prefs.cc
 @@ -14,6 +14,7 @@
@@ -223,7 +235,18 @@
      return;
    }
  
-@@ -5783,6 +5789,9 @@
+@@ -3028,6 +3034,10 @@
+   }
+ #endif
+   if (!IsLocationBarVisible()) {
++    // Helide Synergy mode may hide the address bar; a program can stand in.
++    if (auto* synergy = helium::SynergyController::From(browser_)) {
++      synergy->OnHiddenAddressBarFocusRequested(is_user_initiated);
++    }
+     return;
+   }
+ 
+@@ -5783,6 +5793,9 @@
    }
  
    UpdateTabSearchBubbleHost();
@@ -409,7 +432,7 @@
        anchor_rect, arrow(), GetWidget()->client_view()->GetPreferredSize({}),
 --- /dev/null
 +++ b/chrome/browser/ui/views/helium/helium_address_bar_ipc.cc
-@@ -0,0 +1,810 @@
+@@ -0,0 +1,927 @@
 +// Copyright 2026 The Helide Authors
 +// Use of this source code is governed by the GPL-3.0 license in LICENSE.
 +
@@ -743,10 +766,22 @@
 +                     public AutocompleteController::Observer,
 +                     public views::WidgetObserver {
 + public:
-+  explicit WindowSource(BrowserView* browser_view);
++  WindowSource(BrowserView* browser_view,
++               base::RepeatingCallback<void(bool)> on_external_open);
 +  WindowSource(const WindowSource&) = delete;
 +  WindowSource& operator=(const WindowSource&) = delete;
 +  ~WindowSource() override;
++
++  // AddressBarIpcRegistration:
++  bool RequestExternalAddressBar(std::string_view reason) override;
++  bool HasExternalAddressBar() const override;
++
++  void SetExternalOpen(bool open) {
++    if (external_open_ != open) {
++      external_open_ = open;
++      on_external_open_.Run(open);
++    }
++  }
 +
 +  int id() const { return id_; }
 +  bool focused() const { return widget_ && widget_->IsActive(); }
@@ -842,6 +877,8 @@
 +  const raw_ptr<BrowserWindowInterface> browser_;
 +  const int id_;
 +  double progress_ = 1.0;
++  const base::RepeatingCallback<void(bool)> on_external_open_;
++  bool external_open_ = false;
 +  raw_ptr<views::Widget> widget_;
 +  base::ScopedObservation<AutocompleteController,
 +                          AutocompleteController::Observer>
@@ -928,6 +965,9 @@
 +    std::erase_if(server->queries_, [&](const auto& entry) {
 +      return entry.second->window() == window->id();
 +    });
++    std::erase_if(server->open_for_, [&](const auto& entry) {
++      return entry.second == window->id();
++    });
 +    server->Broadcast(base::DictValue()
 +                          .Set("event", "closed")
 +                          .Set("window", window->id()));
@@ -935,6 +975,22 @@
 +      instance_ = nullptr;
 +      delete server;
 +    }
++  }
++
++  bool has_external_address_bar() const { return !address_bars_.empty(); }
++
++  bool RequestExternalAddressBar(const WindowSource& window,
++                                 std::string_view reason) {
++    if (address_bars_.empty()) {
++      return false;
++    }
++    base::DictValue event = window.State();
++    event.Set("event", "focus_address_bar");
++    event.Set("reason", reason);
++    for (int client : address_bars_) {
++      Send(client, event.Clone());
++    }
++    return true;
 +  }
 +
 +  void BroadcastState(const WindowSource& window) {
@@ -1010,9 +1066,49 @@
 +    return windows_.empty() ? nullptr : windows_.front().get();
 +  }
 +
++  WindowSource* FindWindowById(int id) {
++    for (WindowSource* window : windows_) {
++      if (window->id() == id) {
++        return window;
++      }
++    }
++    return nullptr;
++  }
++
++  // The editor of `client` is open for `window`, or for none (0).
++  void SetOpenFor(int client, int window) {
++    auto it = open_for_.find(client);
++    const int was = it == open_for_.end() ? 0 : it->second;
++    if (was == window) {
++      return;
++    }
++    if (window) {
++      open_for_[client] = window;
++    } else {
++      open_for_.erase(client);
++    }
++    // A window's editor is open while any client has it open.
++    auto still_open = [&](int id) {
++      return std::ranges::any_of(open_for_,
++                                 [&](const auto& e) { return e.second == id; });
++    };
++    if (was) {
++      if (WindowSource* old = FindWindowById(was)) {
++        old->SetExternalOpen(still_open(was));
++      }
++    }
++    if (window) {
++      if (WindowSource* now = FindWindowById(window)) {
++        now->SetExternalOpen(true);
++      }
++    }
++  }
++
 +  void OnClosed(int client) {
 +    subscribers_.erase(client);
 +    queries_.erase(client);
++    address_bars_.erase(client);
++    SetOpenFor(client, 0);
 +  }
 +
 +  void OnLine(int client, std::string line) {
@@ -1056,10 +1152,36 @@
 +      Reply(client, id, base::DictValue().Set("ok", true));
 +      return;
 +    }
++    if (*command == "register_address_bar") {
++      address_bars_.insert(client);
++      Reply(client, id, base::DictValue().Set("ok", true));
++      return;
++    }
++    if (*command == "unregister_address_bar") {
++      address_bars_.erase(client);
++      SetOpenFor(client, 0);
++      Reply(client, id, base::DictValue().Set("ok", true));
++      return;
++    }
 +
 +    WindowSource* const window = FindWindow(*request);
 +    if (!window) {
 +      Error(client, id, "no such window");
++      return;
++    }
++
++    if (*command == "address_bar_open") {
++      const std::optional<bool> open = request->FindBool("open");
++      if (!open) {
++        Error(client, id, "missing open");
++        return;
++      }
++      if (!address_bars_.contains(client)) {
++        Error(client, id, "not registered as an address bar");
++        return;
++      }
++      SetOpenFor(client, *open ? window->id() : 0);
++      Reply(client, id, base::DictValue().Set("ok", true));
 +      return;
 +    }
 +
@@ -1167,16 +1289,22 @@
 +
 +  std::vector<raw_ptr<WindowSource>> windows_;
 +  std::set<int> subscribers_;
++  // Clients standing in for the address bar, and the window each one's editor
++  // is open for.
++  std::set<int> address_bars_;
++  std::map<int, int> open_for_;
 +  std::map<int, std::unique_ptr<Query>> queries_;
 +  base::WeakPtrFactory<Server> weak_factory_{this};
 +  // Last, so that it is destroyed (and stops calling back) first.
 +  base::SequenceBound<SocketIo> io_;
 +};
 +
-+WindowSource::WindowSource(BrowserView* browser_view)
++WindowSource::WindowSource(BrowserView* browser_view,
++                           base::RepeatingCallback<void(bool)> on_external_open)
 +    : browser_(browser_view->browser()),
 +      id_(browser_view->browser()->GetSessionID().id()),
-+      widget_(browser_view->GetWidget()) {
++      widget_(browser_view->GetWidget()),
++      on_external_open_(std::move(on_external_open)) {
 +  browser_->GetTabStripModel()->AddObserver(this);
 +  ObserveActiveTab();
 +  if (widget_) {
@@ -1195,6 +1323,16 @@
 +  browser_->GetTabStripModel()->RemoveObserver(this);
 +}
 +
++bool WindowSource::RequestExternalAddressBar(std::string_view reason) {
++  Server* const server = Server::instance();
++  return server && server->RequestExternalAddressBar(*this, reason);
++}
++
++bool WindowSource::HasExternalAddressBar() const {
++  Server* const server = Server::instance();
++  return server && server->has_external_address_bar();
++}
++
 +void WindowSource::Changed() {
 +  if (Server* server = Server::instance()) {
 +    server->BroadcastState(*this);
@@ -1211,18 +1349,20 @@
 +}  // namespace
 +
 +std::unique_ptr<AddressBarIpcRegistration> RegisterWindowForAddressBarIpc(
-+    BrowserView* browser_view) {
++    BrowserView* browser_view,
++    base::RepeatingCallback<void(bool open)> on_external_address_bar_open) {
 +  if (!browser_view->GetProfile() ||
 +      browser_view->GetProfile()->IsOffTheRecord()) {
 +    return nullptr;
 +  }
-+  return std::make_unique<WindowSource>(browser_view);
++  return std::make_unique<WindowSource>(
++      browser_view, std::move(on_external_address_bar_open));
 +}
 +
 +}  // namespace helium
 --- /dev/null
 +++ b/chrome/browser/ui/views/helium/helium_address_bar_ipc.h
-@@ -0,0 +1,31 @@
+@@ -0,0 +1,48 @@
 +// Copyright 2026 The Helide Authors
 +// Use of this source code is governed by the GPL-3.0 license in LICENSE.
 +
@@ -1230,6 +1370,9 @@
 +#define CHROME_BROWSER_UI_VIEWS_HELIUM_HELIUM_ADDRESS_BAR_IPC_H_
 +
 +#include <memory>
++#include <string_view>
++
++#include "base/functional/callback_forward.h"
 +
 +class BrowserView;
 +
@@ -1242,21 +1385,35 @@
 +//
 +// A window is on the socket while its registration lives; the socket exists
 +// while any window is registered. Synergy mode registers its windows.
++//
++// A program can also stand in for the address bar ("register_address_bar"):
++// it is asked to open when the window's own address bar is hidden and would
++// have taken focus, and it says when its editor is open for the window.
 +class AddressBarIpcRegistration {
 + public:
 +  virtual ~AddressBarIpcRegistration() = default;
++
++  // Asks the programs standing in for the address bar to open for this
++  // window, for `reason` ("shortcut", "new_tab"). False if there are none.
++  virtual bool RequestExternalAddressBar(std::string_view reason) = 0;
++
++  // Whether a program stands in for the address bar.
++  virtual bool HasExternalAddressBar() const = 0;
 +};
 +
 +// Not for off-the-record windows, which are never reported.
++// `on_external_address_bar_open` runs when a program's editor opens or closes
++// for this window.
 +std::unique_ptr<AddressBarIpcRegistration> RegisterWindowForAddressBarIpc(
-+    BrowserView* browser_view);
++    BrowserView* browser_view,
++    base::RepeatingCallback<void(bool open)> on_external_address_bar_open);
 +
 +}  // namespace helium
 +
 +#endif  // CHROME_BROWSER_UI_VIEWS_HELIUM_HELIUM_ADDRESS_BAR_IPC_H_
 --- /dev/null
 +++ b/chrome/browser/ui/views/helium/helium_synergy_controller.cc
-@@ -0,0 +1,786 @@
+@@ -0,0 +1,855 @@
 +// Copyright 2026 The Helide Authors
 +// Use of this source code is governed by the GPL-3.0 license in LICENSE.
 +
@@ -1281,6 +1438,7 @@
 +#include "chrome/browser/ui/color/chrome_color_id.h"
 +#include "chrome/browser/ui/helium/helium_layout_state_controller.h"
 +#include "chrome/browser/ui/layout_constants.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
 +#include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
 +#include "chrome/browser/ui/views/frame/browser_view.h"
 +#include "chrome/browser/ui/views/frame/custom_corners_background.h"
@@ -1294,6 +1452,8 @@
 +#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 +#include "chrome/common/helium_synergy_prefs.h"
 +#include "components/prefs/pref_service.h"
++#include "content/public/browser/web_contents.h"
++#include "url/gurl.h"
 +#include "components/vector_icons/vector_icons.h"
 +#include "ui/base/metadata/metadata_header_macros.h"
 +#include "ui/base/metadata/metadata_impl_macros.h"
@@ -1327,6 +1487,12 @@
 +constexpr base::TimeDelta kAutohideDelay = base::Milliseconds(350);
 +
 +constexpr int kCompactIconSize = 16;
++
++// How long the native address bar waits, after the window lost focus, for a
++// program standing in for it to say that its editor took the focus.
++constexpr base::TimeDelta kExternalClickGrace = base::Milliseconds(250);
++// The same, after asking that program to open.
++constexpr base::TimeDelta kExternalOpenGrace = base::Milliseconds(1500);
 +
 +// How long the address bar takes to slide in or out with autohide.
 +constexpr base::TimeDelta kRevealDuration = base::Milliseconds(200);
@@ -1739,9 +1905,14 @@
 +  const bool ipc = browser_view_->GetProfile()->GetPrefs()->GetBoolean(
 +      kSynergyMode);
 +  if (ipc && !ipc_registration_) {
-+    ipc_registration_ = RegisterWindowForAddressBarIpc(browser_view_);
++    ipc_registration_ = RegisterWindowForAddressBarIpc(
++        browser_view_,
++        base::BindRepeating(&SynergyController::OnExternalAddressBarOpen,
++                            base::Unretained(this)));
 +  } else if (!ipc) {
 +    ipc_registration_.reset();
++    external_open_ = false;
++    external_grace_timer_.Stop();
 +  }
 +
 +  // Ctrl+Shift+L pins the top chrome in Zen mode, and reveals the address bar
@@ -1831,6 +2002,7 @@
 +  }
 +  active_ = false;
 +  revealed_ = false;
++  external_grace_timer_.Stop();
 +  autohide_delay_timer_.Stop();
 +  expand_lock_.reset();
 +
@@ -1887,8 +2059,12 @@
 +  if (!active_ || !location_bar_view) {
 +    return;
 +  }
-+  const bool hide = AutohideEnabled() && widget_->ShouldPaintAsActive() &&
-+                    !revealed_ && !autohide_delay_timer_.IsRunning();
++  // Focus that went to the program standing in for the address bar still
++  // counts as the window's.
++  const bool focused = widget_->ShouldPaintAsActive() || external_open_ ||
++                       external_grace_timer_.IsRunning();
++  const bool hide = AutohideEnabled() && focused && !revealed_ &&
++                    !autohide_delay_timer_.IsRunning();
 +  if (!top_row_ || top_row_->shown() == !hide) {
 +    return;
 +  }
@@ -1973,14 +2149,64 @@
 +          base::BindOnce(&SynergyController::OnAutohideDelayElapsed,
 +                         base::Unretained(this)));
 +    }
++    external_grace_timer_.Stop();
 +  } else {
 +    autohide_delay_timer_.Stop();
++    // The focus may have gone to the program standing in for the address bar
++    // (a click on it); give it a moment to say so before showing ours.
++    if (!external_open_ && !external_grace_timer_.IsRunning() &&
++        ipc_registration_ && ipc_registration_->HasExternalAddressBar()) {
++      external_grace_timer_.Start(
++          FROM_HERE, kExternalClickGrace,
++          base::BindOnce(&SynergyController::UpdateAddressBarVisibility,
++                         base::Unretained(this)));
++    }
 +  }
 +  UpdateAddressBarVisibility();
 +}
 +
 +void SynergyController::OnAutohideDelayElapsed() {
 +  UpdateAddressBarVisibility();
++}
++
++void SynergyController::OnExternalAddressBarOpen(bool open) {
++  VLOG(1) << "Synergy: external address bar open=" << open;
++  external_open_ = open;
++  external_grace_timer_.Stop();
++  UpdateAddressBarVisibility();
++}
++
++void SynergyController::OnHiddenAddressBarFocusRequested(
++    bool is_user_initiated) {
++  if (!active_ || !ipc_registration_ || !AutohideEnabled()) {
++    return;
++  }
++  // Besides Ctrl+L and the like, the browser focuses the address bar by
++  // itself for a new tab page; other cases (restoring focus) are not asked
++  // for.
++  std::string_view reason = "shortcut";
++  if (!is_user_initiated) {
++    content::WebContents* const contents =
++        browser_view_->browser()->GetTabStripModel()->GetActiveWebContents();
++    const GURL url = contents ? contents->GetVisibleURL() : GURL();
++    const bool new_tab_page =
++        url.IsAboutBlank() ||
++        (url.SchemeIs("chrome") &&
++         (url.host() == "newtab" || url.host() == "new-tab-page"));
++    if (!new_tab_page) {
++      return;
++    }
++    reason = "new_tab";
++  }
++  VLOG(1) << "Synergy: asking for the external address bar, reason=" << reason;
++  if (ipc_registration_->RequestExternalAddressBar(reason)) {
++    // The program will take focus to open its editor; until it says it has,
++    // keep the native address bar hidden.
++    external_grace_timer_.Start(
++        FROM_HERE, kExternalOpenGrace,
++        base::BindOnce(&SynergyController::UpdateAddressBarVisibility,
++                       base::Unretained(this)));
++  }
 +}
 +
 +void SynergyController::OnEvent(const ui::Event& event) {
@@ -2045,7 +2271,7 @@
 +}  // namespace helium
 --- /dev/null
 +++ b/chrome/browser/ui/views/helium/helium_synergy_controller.h
-@@ -0,0 +1,180 @@
+@@ -0,0 +1,192 @@
 +// Copyright 2026 The Helide Authors
 +// Use of this source code is governed by the GPL-3.0 license in LICENSE.
 +
@@ -2122,6 +2348,10 @@
 +
 +  bool active() const { return active_; }
 +
++  // Something would focus the address bar while autohide hides it (Ctrl+L, or
++  // a new tab). A program standing in for the address bar is asked instead.
++  void OnHiddenAddressBarFocusRequested(bool is_user_initiated);
++
 +  // Called by the rows.
 +  void FocusAddressBar();
 +  void OnToolbarCompactChanged(bool compact);
@@ -2161,6 +2391,7 @@
 +  void SetHidden(views::View* view, bool hidden);
 +  void OnPaintAsActiveChanged();
 +  void OnAutohideDelayElapsed();
++  void OnExternalAddressBarOpen(bool open);
 +  bool FocusIsInAddressBar() const;
 +  void Teardown();
 +
@@ -2211,6 +2442,13 @@
 +  // while it showed, and stays until focus leaves it.
 +  bool revealed_ = false;
 +  base::OneShotTimer autohide_delay_timer_;
++  // A program stands in for the address bar (see helium_address_bar_ipc.h):
++  // its editor is open for this window, which keeps the native address bar
++  // hidden although the window lost focus to it.
++  bool external_open_ = false;
++  // Keeps the native address bar hidden while the program's editor may be
++  // taking focus and has not said so yet.
++  base::OneShotTimer external_grace_timer_;
 +  // Watches for clicks on the address bar.
 +  std::unique_ptr<views::EventMonitor> click_monitor_;
 +

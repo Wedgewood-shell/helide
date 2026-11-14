@@ -13,10 +13,12 @@
 // Needs a built tree (build/src/out/Default/helium), libwayland-server and
 // wayland-scanner. HELIDE_TEST_EXECUTABLE overrides the browser.
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 import {
-  activate, activeTab, ensureBuilt, makeTester, openTabs, session as baseSession, waitFor,
+  activate, activeTab, ensureBuilt, makeTester, openTabs, session as baseSession, socketClient, waitFor,
 } from './lib/fake-wayland-browser.mjs';
 
 const frames = '/tmp/helide-synergy-frame';
@@ -284,6 +286,312 @@ await session({ synergy_mode: true, synergy_autohide_address_bar: true }, async 
     frame = await compositor.frame(`${frames}-hidden-again.ppm`);
     assert.ok(!addressBarShown(frame), 'hidden again');
     assert.equal(focusedView(browser), 'ContentsWebView', 'with focus back on the page');
+  });
+});
+
+// A program standing in for the address bar, as a Quickshell island does.
+await session({ synergy_mode: true, synergy_autohide_address_bar: true }, async ({ compositor, cdp, browser, runtimeDir }) => {
+  await openTabs(cdp, 2);
+  await sleep(800);
+  const path = join(runtimeDir, 'helide-address-bar.sock');
+  await waitFor(() => existsSync(path), 'the socket');
+  const island = await socketClient(path);
+  assert.equal((await island.request('register_address_bar')).ok, true);
+  const shown = async name => addressBarShown(await compositor.frame(`${frames}-${name}.ppm`));
+
+  await test('stand-in: Ctrl+L asks it to open, instead of doing nothing', async () => {
+    const { tab } = await viewport(cdp);
+    await cdp.key(tab.targetId, 'l', 'KeyL', 76, CTRL);
+    const event = await waitFor(() => island.events('focus_address_bar').at(-1), 'a focus_address_bar event');
+    assert.equal(event.reason, 'shortcut');
+    assert.equal(event.title, 'Tab 2');
+    assert.equal(typeof event.window, 'number');
+    assert.equal(await shown('standin-asked'), false, 'the native address bar stays hidden');
+  });
+
+  await test('stand-in: while its editor is open, the native one stays hidden', async () => {
+    await island.request('address_bar_open', { open: true });
+    await compositor.cmd('activate 0');  // it took the keyboard
+    await sleep(800);
+    assert.equal(await shown('standin-open'), false, 'hidden while the window is not focused');
+    await island.request('address_bar_open', { open: false });
+    await sleep(700);
+    assert.equal(await shown('standin-closed'), true, 'shown once the editor closed and another window has focus');
+    await compositor.cmd('activate 1');
+    await sleep(900);
+  });
+
+  await test('stand-in: a click on it does not flash the native address bar', async () => {
+    await compositor.cmd('activate 0');
+    await sleep(60);
+    await island.request('address_bar_open', { open: true });
+    const states = [];
+    for (let n = 0; n < 8; n++) { states.push(await shown(`standin-click-${n}`)); await sleep(60); }
+    assert.ok(states.every(s => !s), `hidden throughout: ${states}`);
+    await island.request('address_bar_open', { open: false });
+    await compositor.cmd('activate 1');
+    await sleep(900);
+  });
+
+  await test('stand-in: losing focus to another window still shows the native one', async () => {
+    await compositor.cmd('activate 0');
+    await sleep(800);
+    assert.equal(await shown('standin-elsewhere'), true);
+    await compositor.cmd('activate 1');
+    await sleep(900);
+  });
+});
+
+await session({ synergy_mode: true }, async ({ compositor, cdp, browser }) => {
+  await openTabs(cdp, 2);
+  await sleep(800);
+
+  await test('the page takes the height of the toolbar row', async () => {
+    const { height } = await viewport(cdp);
+    assert.ok(height >= classicHeight + 25, `viewport ${height}, ${classicHeight} with a toolbar`);
+    const frame = await compositor.frame(`${frames}-on.ppm`);
+    assert.ok(ink(frame, TOOLBAR_ROW) < 40, 'no toolbar over the page');
+  });
+
+  await test('the address bar is at the top of the strip, the buttons at its bottom', async () => {
+    const frame = await compositor.frame(`${frames}-on.ppm`);
+    assert.ok(addressBarShown(frame), `strip background share ${stripShare(frame, BAR_BACKGROUND)}`);
+    assert.ok(ink(frame, STRIP_BOTTOM) > 80, `toolbar button ink ${ink(frame, STRIP_BOTTOM)}`);
+  });
+
+  await test('Ctrl+L focuses the address bar', async () => {
+    await activate(cdp, 'Tab 1');
+    assert.equal(focusedView(browser), 'ContentsWebView', 'a tab switch focuses the page');
+    const { tab } = await viewport(cdp);
+    await cdp.key(tab.targetId, 'l', 'KeyL', 76, CTRL);
+    await sleep(500);
+    assert.equal(focusedView(browser), 'OmniboxViewViews');
+  });
+
+  await test('turning it off and on again moves the toolbar back and forth', async () => {
+    await setPref(cdp, 'helium.browser.synergy_mode', false);
+    let frame = await compositor.frame(`${frames}-off-again.ppm`);
+    assert.ok(ink(frame, TOOLBAR_ROW) > 40, 'the toolbar row is back');
+    await setPref(cdp, 'helium.browser.synergy_mode', true);
+    frame = await compositor.frame(`${frames}-on-again.ppm`);
+    assert.ok(ink(frame, TOOLBAR_ROW) < 40, 'and gone again');
+    assert.ok(addressBarShown(frame), 'the address bar is in the strip again');
+  });
+
+  await test('switching to another layout and back keeps working', async () => {
+    await setPref(cdp, 'helium.browser.layout', 0);
+    let frame = await compositor.frame(`${frames}-classic.ppm`);
+    assert.ok(ink(frame, TOOLBAR_ROW) > 40, 'the classic layout has its toolbar');
+    await setPref(cdp, 'helium.browser.layout', 2);
+    frame = await compositor.frame(`${frames}-vertical.ppm`);
+    assert.ok(ink(frame, TOOLBAR_ROW) < 40, 'Synergy mode is back with vertical tabs');
+    assert.ok(addressBarShown(frame), 'with the address bar in the strip');
+  });
+
+  await test('Zen mode turns it off', async () => {
+    await setPref(cdp, 'helium.browser.zen_mode', true);
+    await setPref(cdp, 'helium.browser.zen_mode', false);
+    const frame = await compositor.frame(`${frames}-after-zen.ppm`);
+    assert.ok(addressBarShown(frame), 'Synergy mode is back after Zen mode');
+  });
+
+  await test('the outline around the extension icons is around them', async () => {
+    await compositor.cmd('motion 35 785');  // hovering a pinned extension shows it
+    await sleep(1000);
+    const frame = await compositor.frame(`${frames}-outline.ppm`);
+    await compositor.cmd('motion 700 400');
+    // Rows where the outline's top or bottom edge runs across the icons.
+    const edges = [];
+    for (let y = 740; y < 800; y++) {
+      let light = 0;
+      for (let x = 20; x < 82; x++) {
+        const i = (y * frame.width + x) * 3;
+        if (frame.pixels[i] + frame.pixels[i + 1] + frame.pixels[i + 2] > 200) light++;
+      }
+      if (light > 40) edges.push(y);
+    }
+    assert.equal(edges.length, 2, `a top and a bottom edge, got rows ${edges}`);
+    assert.ok(edges[1] - edges[0] > 20, 'around the icons, not through them');
+  });
+
+  await test('bubbles from the bottom buttons open upwards, inside the window', async () => {
+    // The extensions button, then the pinned extension (uBlock Origin).
+    for (const x of [66, 35]) {
+      await compositor.cmd(`click ${x} 785`);
+      await sleep(1800);
+      const reply = await compositor.cmd('popups');
+      const bubbles = [...reply.matchAll(/subsurface at=(-?\d+),(-?\d+) size=(\d+)x(\d+)/g)]
+          .map(m => m.slice(1).map(Number)).filter(([, , w, h]) => w > 100 && h > 100);
+      assert.ok(bubbles.length, `a bubble opened: ${reply}`);
+      for (const [bx, by, w, h] of bubbles) {
+        assert.ok(bx >= 0 && by >= 0 && bx + w <= 1280 && by + h <= 800, `inside the window: ${bx},${by} ${w}x${h}`);
+        assert.ok(by + h <= 790, `above the button: ${bx},${by} ${w}x${h}`);
+      }
+      await compositor.cmd('click 700 400');
+      await sleep(800);
+    }
+  });
+
+  await test('the app menu lets the compositor flip it upwards', async () => {
+    await compositor.cmd('popups');
+    await compositor.cmd('click 126 785');
+    await sleep(1500);
+    const reply = await compositor.cmd('popups');
+    const constraint = +(reply.match(/popup .*?constraint=(\d+)/)?.[1] ?? -1);
+    assert.ok(constraint >= 0, `a menu opened: ${reply}`);
+    assert.ok(constraint & 8, 'flip_y is allowed');
+    await compositor.cmd('click 700 400');
+    await sleep(500);
+  });
+
+  await test('closing the window with it on is clean', async () => {
+    const { tab } = await viewport(cdp);
+    for (const target of await cdp.pages()) {
+      if (target.targetId !== tab.targetId) await cdp.send('Target.closeTarget', { targetId: target.targetId });
+    }
+    await cdp.send('Browser.close').catch(() => {});
+    await sleep(1500);
+  });
+});
+
+await session({ synergy_mode: true, synergy_autohide_address_bar: true }, async ({ compositor, cdp, browser }) => {
+  await openTabs(cdp, 2);
+  await sleep(800);
+  const { tab, height } = await viewport(cdp);
+
+  await test('autohide: no address bar while the window is focused', async () => {
+    const frame = await compositor.frame(`${frames}-autohide.ppm`);
+    assert.ok(!addressBarShown(frame), `strip background share ${stripShare(frame, BAR_BACKGROUND)}`);
+    assert.ok(ink(frame, STRIP_BOTTOM) > 80, 'the toolbar buttons stay');
+  });
+
+  await test('autohide: the address bar shows while another window is focused', async () => {
+    await compositor.cmd('activate 0');
+    await sleep(700);
+    let frame = await compositor.frame(`${frames}-inactive.ppm`);
+    assert.ok(addressBarShown(frame), `strip background share ${stripShare(frame, BAR_BACKGROUND)}`);
+    assert.equal((await viewport(cdp)).height, height, 'the page does not move');
+    await compositor.cmd('activate 1');
+    await sleep(150);
+    frame = await compositor.frame(`${frames}-just-active.ppm`);
+    assert.ok(addressBarShown(frame), 'it stays a moment after activation, for the activating click');
+    await sleep(900);
+    frame = await compositor.frame(`${frames}-active-again.ppm`);
+    assert.ok(!addressBarShown(frame), 'then hides');
+  });
+
+  await test('autohide: it slides in and out instead of popping', async () => {
+    const sample = async name => {
+      const shares = [];
+      for (let n = 0; n < 16; n++) {
+        shares.push(stripShare(await compositor.frame(`${frames}-${name}-${n}.ppm`), BAR_BACKGROUND));
+        await sleep(20);
+      }
+      return shares;
+    };
+    await compositor.cmd('activate 0');
+    const showing = await sample('show');
+    await compositor.cmd('activate 1');
+    await sleep(300);  // the delay after activation
+    const hiding = await sample('hide');
+    // The strip's background share is about 0.84 hidden and 0 shown.
+    const partial = values => values.filter(v => v > 0.05 && v < 0.8).length;
+    assert.ok(partial(showing) >= 2, `in-between frames while showing: ${showing.map(v => v.toFixed(2))}`);
+    assert.ok(partial(hiding) >= 2, `in-between frames while hiding: ${hiding.map(v => v.toFixed(2))}`);
+    assert.ok(showing.at(-1) < 0.4 && hiding.at(-1) >= 0.4, 'ends shown, then hidden');
+  });
+
+  await test('autohide: Ctrl+L does nothing', async () => {
+    await cdp.key(tab.targetId, 'l', 'KeyL', 76, CTRL);
+    await sleep(500);
+    const frame = await compositor.frame(`${frames}-ctrl-l.ppm`);
+    assert.ok(!addressBarShown(frame), 'still hidden');
+    assert.notEqual(focusedView(browser), 'OmniboxViewViews', 'the address bar has no focus');
+  });
+
+  await test('autohide: Ctrl+Shift+L shows and focuses it, and again hides it', async () => {
+    await cdp.key(tab.targetId, 'L', 'KeyL', 76, CTRL | SHIFT);
+    await sleep(500);
+    let frame = await compositor.frame(`${frames}-revealed.ppm`);
+    assert.ok(addressBarShown(frame), 'shown');
+    assert.equal(focusedView(browser), 'OmniboxViewViews', 'and focused');
+    await cdp.key(tab.targetId, 'L', 'KeyL', 76, CTRL | SHIFT);
+    await sleep(500);
+    frame = await compositor.frame(`${frames}-hidden-again.ppm`);
+    assert.ok(!addressBarShown(frame), 'hidden again');
+    assert.equal(focusedView(browser), 'ContentsWebView', 'with focus back on the page');
+  });
+});
+
+// A program standing in for the address bar, as a Quickshell island does.
+await session({ synergy_mode: true, synergy_autohide_address_bar: true }, async ({ compositor, cdp, browser, runtimeDir }) => {
+  await openTabs(cdp, 2);
+  await sleep(800);
+  const path = join(runtimeDir, 'helide-address-bar.sock');
+  await waitFor(() => existsSync(path), 'the socket');
+  const island = await socketClient(path);
+  assert.equal((await island.request('register_address_bar')).ok, true);
+  const shown = async name => addressBarShown(await compositor.frame(`${frames}-${name}.ppm`));
+
+  await test('stand-in: Ctrl+L asks it to open, instead of doing nothing', async () => {
+    const { tab } = await viewport(cdp);
+    await cdp.key(tab.targetId, 'l', 'KeyL', 76, CTRL);
+    const event = await waitFor(() => island.events('focus_address_bar').at(-1), 'a focus_address_bar event');
+    assert.equal(event.reason, 'shortcut');
+    assert.equal(event.title, 'Tab 2');
+    assert.equal(typeof event.window, 'number');
+    assert.equal(await shown('standin-asked'), false, 'the native address bar stays hidden');
+  });
+
+  await test('stand-in: while its editor is open, the native one stays hidden', async () => {
+    await island.request('address_bar_open', { open: true });
+    await compositor.cmd('activate 0');  // it took the keyboard
+    await sleep(800);
+    assert.equal(await shown('standin-open'), false, 'hidden while the window is not focused');
+    await island.request('address_bar_open', { open: false });
+    await sleep(700);
+    assert.equal(await shown('standin-closed'), true, 'shown once the editor closed and another window has focus');
+    await compositor.cmd('activate 1');
+    await sleep(900);
+  });
+
+  await test('stand-in: a click on it does not flash the native address bar', async () => {
+    await compositor.cmd('activate 0');
+    await sleep(60);
+    await island.request('address_bar_open', { open: true });
+    const states = [];
+    for (let n = 0; n < 8; n++) { states.push(await shown(`standin-click-${n}`)); await sleep(60); }
+    assert.ok(states.every(s => !s), `hidden throughout: ${states}`);
+    await island.request('address_bar_open', { open: false });
+    await compositor.cmd('activate 1');
+    await sleep(900);
+  });
+
+  await test('stand-in: losing focus to another window still shows the native one', async () => {
+    await compositor.cmd('activate 0');
+    await sleep(800);
+    assert.equal(await shown('standin-elsewhere'), true);
+    await compositor.cmd('activate 1');
+    await sleep(900);
+  });
+
+  await test('stand-in: a new tab asks it to open', async () => {
+    const before = island.events('focus_address_bar').length;
+    const { tab } = await viewport(cdp);
+    await cdp.key(tab.targetId, 't', 'KeyT', 84, CTRL, { up: false });
+    const event = await waitFor(() => island.events('focus_address_bar').slice(before).at(-1), 'a new_tab request');
+    assert.equal(event.reason, 'new_tab');
+  });
+
+  await test('stand-in: if it goes away, the native one works as before', async () => {
+    await island.request('address_bar_open', { open: true });
+    island.close();
+    await sleep(300);
+    await compositor.cmd('activate 0');
+    await sleep(800);
+    assert.equal(await shown('standin-gone'), true, 'shown while another window has focus');
+    await compositor.cmd('activate 1');
+    await sleep(900);
   });
 });
 

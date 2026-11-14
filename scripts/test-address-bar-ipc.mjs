@@ -10,32 +10,13 @@
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { connect } from 'node:net';
 import { join } from 'node:path';
-import { createInterface } from 'node:readline';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import { ensureBuilt, makeTester, openTabs, session, waitFor } from './lib/fake-wayland-browser.mjs';
+import { ensureBuilt, makeTester, openTabs, session, socketClient as client, waitFor } from './lib/fake-wayland-browser.mjs';
 
 const tester = makeTester();
 const { test } = tester;
-
-// A client: requests with ids, and every message kept for inspection.
-async function client(path) {
-  const socket = connect(path);
-  await new Promise((ok, fail) => { socket.once('connect', ok); socket.once('error', fail); });
-  const messages = [];
-  createInterface({ input: socket }).on('line', line => messages.push(JSON.parse(line)));
-  let nextId = 0;
-  const request = async (cmd, fields = {}) => {
-    const id = ++nextId;
-    socket.write(JSON.stringify({ id, cmd, ...fields }) + '\n');
-    return waitFor(() => messages.find(m => m.id === id && 'ok' in m), `a reply to ${cmd}`);
-  };
-  const raw = text => socket.write(text + '\n');
-  const events = (event, filter = () => true) => messages.filter(m => m.event === event && filter(m));
-  return { socket, messages, request, raw, events, close: () => socket.destroy() };
-}
 
 ensureBuilt();
 

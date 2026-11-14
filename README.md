@@ -490,7 +490,7 @@ With Synergy mode on, Helide serves `$XDG_RUNTIME_DIR/helide-address-bar.sock` f
 echo '{"cmd":"navigate","text":"wayland protocols"}' | socat - UNIX-CONNECT:$XDG_RUNTIME_DIR/helide-address-bar.sock
 ```
 
-Only your user can connect. Incognito windows are never on it, and it can't read pages, cookies or passwords. [How it works, the protocol, and examples for the shell, Python, Node.js and Quickshell](docs/address-bar-ipc.md).
+A program that draws its own address bar (a Quickshell island) can also stand in for the hidden one: Helide asks it to open on Ctrl+L and on a new tab, and keeps its own bar hidden while the stand-in's editor has the keyboard. Only your user can connect. Incognito windows are never on it, and it can't read pages, cookies or passwords. [How it works, the protocol, and examples for the shell, Python, Node.js and Quickshell](docs/address-bar-ipc.md).
 
 ### Tests
 

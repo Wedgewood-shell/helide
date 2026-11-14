@@ -6,6 +6,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { connect } from 'node:net';
 import { createInterface } from 'node:readline';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
@@ -106,10 +107,12 @@ export async function connectCdp(port) {
   };
   // A key press sent to a page; browser shortcuts see it first, as with a
   // real keyboard. `modifiers`: 1 Alt, 2 Ctrl, 4 Meta, 8 Shift.
-  const key = async (targetId, keyName, code, keyCode, modifiers = 0) => {
+  // Without `up`, only the press is sent: after a shortcut that hides the
+  // page (Ctrl+T), a release sent to it is never answered.
+  const key = async (targetId, keyName, code, keyCode, modifiers = 0, { up = true } = {}) => {
     const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
     try {
-      for (const type of ['rawKeyDown', 'keyUp']) {
+      for (const type of up ? ['rawKeyDown', 'keyUp'] : ['rawKeyDown']) {
         await send('Input.dispatchKeyEvent', {
           type, key: keyName, code, windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode, modifiers,
         }, sessionId);
@@ -239,4 +242,22 @@ export function ensureBuilt() {
   if (!existsSync(compositorPath)) {
     execFileSync(join(root, 'tests/fake-wayland-compositor/build.sh'), { stdio: 'inherit' });
   }
+}
+
+// A client of the address bar socket: requests with ids, and every message
+// kept for inspection.
+export async function socketClient(path) {
+  const socket = connect(path);
+  await new Promise((ok, fail) => { socket.once('connect', ok); socket.once('error', fail); });
+  const messages = [];
+  createInterface({ input: socket }).on('line', line => messages.push(JSON.parse(line)));
+  let nextId = 0;
+  const request = async (cmd, fields = {}) => {
+    const id = ++nextId;
+    socket.write(JSON.stringify({ id, cmd, ...fields }) + '\n');
+    return waitFor(() => messages.find(m => m.id === id && 'ok' in m), `a reply to ${cmd}`);
+  };
+  const raw = text => socket.write(text + '\n');
+  const events = (event, filter = () => true) => messages.filter(m => m.event === event && filter(m));
+  return { socket, messages, request, raw, events, close: () => socket.destroy() };
 }

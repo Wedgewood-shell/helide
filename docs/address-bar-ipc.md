@@ -13,6 +13,7 @@ a key), not for automation. For automation, see
 - [Overview](#overview)
 - [How it works](#how-it-works)
 - [Protocol](#protocol)
+- [Standing in for the address bar](#standing-in-for-the-address-bar)
 - [Talking to it](#talking-to-it)
 - [Tests](#tests)
 
@@ -104,6 +105,9 @@ the first one.
 | `reload_bypassing_cache` | | Like Shift+reload |
 | `stop` | | `"ok": false` if the page isn't loading |
 | `back`, `forward` | | `"ok": false` if there is nothing to go to |
+| `register_address_bar` | | Makes this connection a [stand-in for the address bar](#standing-in-for-the-address-bar) |
+| `unregister_address_bar` | | |
+| `address_bar_open` | `open`: true or false. The window comes from `window`, as for other requests. | Says whether the stand-in's editor is open for that window. Needs `register_address_bar` first. |
 | `complete` | `text` | Then [`suggestions`](#suggestions) events with this request's `id`, until one has `"done": true`. A new `complete` from the same connection replaces the previous one. |
 
 Errors:
@@ -118,6 +122,8 @@ Errors:
 | `not a URL that can be opened` | An invalid URL, or a `javascript:` URL |
 | `not available now` | The command can't run now, for example `back` on the first page |
 | `no tab` | The window has no current tab yet |
+| `missing open` | `address_bar_open` without `open` |
+| `not registered as an address bar` | `address_bar_open` without `register_address_bar` first |
 
 ### Events
 
@@ -179,6 +185,57 @@ A window closed, or left the socket because Synergy mode was turned off.
 ```json
 {"event":"closed","window":1234}
 ```
+
+#### `focus_address_bar`
+
+Sent only to [stand-ins for the address bar](#standing-in-for-the-address-bar),
+when the window would focus its address bar but hides it. It has the fields of
+a [`state`](#state) event, and a `reason`:
+
+- `shortcut`: Ctrl+L, or another command that focuses the address bar
+- `new_tab`: a new tab page opened, whose address bar would have focus
+
+```json
+{"event":"focus_address_bar","reason":"new_tab","window":1234,"focused":true,
+ "url":"chrome://newtab/","title":"New Tab","loading":false,"progress":1,
+ "can_go_back":false,"can_go_forward":false}
+```
+
+## Standing in for the address bar
+
+With **Hide the address bar while the window is focused** on, the browser's
+address bar shows only while another window has focus. A program that draws its
+own address bar (a Quickshell island, say) can take its place:
+
+1. **Register.** Send `register_address_bar` after connecting. A connection
+   stops being a stand-in when it closes or sends `unregister_address_bar`.
+2. **Open when asked.** When the window would focus its hidden address bar,
+   every stand-in gets a [`focus_address_bar`](#focus_address_bar) event. Open
+   your editor for that `window`.
+3. **Say when your editor is open.** Opening it takes the keyboard from the
+   browser, so the window loses focus. Without help the browser would then
+   show its own address bar, because another window has focus. Send
+   `{"cmd":"address_bar_open","open":true,"window":<id>}` when your editor
+   opens and `open: false` when it closes. While it is open, the browser keeps
+   its address bar hidden. Send it also for a click on your editor that wasn't
+   asked for.
+
+Helide gives you some slack so there is no flash while you do this:
+
+- After it sends `focus_address_bar`, its address bar stays hidden for up to
+  1.5 seconds, waiting for `address_bar_open`.
+- When the window loses focus while a stand-in is registered, it waits a
+  quarter of a second before showing its own, in case focus went to the
+  stand-in.
+
+If your editor closes with `open: false` and another window has focus, the
+browser's address bar slides in. If the stand-in disconnects, any editor it had
+open counts as closed.
+
+Not for every focus: only Ctrl+L and the like, and a new tab page. Other times
+the browser focuses its address bar (restoring focus after a dialog) don't ask
+for a stand-in, as the user didn't ask for the address bar. **Ctrl+Shift+L**
+always shows the browser's own address bar.
 
 ## Talking to it
 
@@ -295,6 +352,34 @@ Item {
 Quickshell doesn't reconnect by itself. To pick the socket up after the browser
 starts, set `connected` again, for example from a `Timer` while it is false.
 
+### A stand-in, in Quickshell
+
+```qml
+Socket {
+    id: helide
+    path: Quickshell.env("XDG_RUNTIME_DIR") + "/helide-address-bar.sock"
+    connected: true
+    property bool editorOpen: false
+    property int windowId: 0
+
+    function send(message) { write(JSON.stringify(message) + "\n"); flush() }
+    onEditorOpenChanged: send({ cmd: "address_bar_open", open: editorOpen, window: windowId })
+    onConnectedChanged: if (connected) {
+        send({ cmd: "subscribe" })
+        send({ cmd: "register_address_bar" })
+    }
+    parser: SplitParser {
+        onRead: line => {
+            const message = JSON.parse(line)
+            if (message.event === "focus_address_bar") {
+                helide.windowId = message.window
+                openMyAddressEditor(message.url)   // sets helide.editorOpen = true
+            }
+        }
+    }
+}
+```
+
 ### Robust clients
 
 - **The socket comes and goes** with Synergy mode and with the browser.
@@ -320,6 +405,10 @@ It covers:
 - `complete`
 - errors for bad requests
 - the socket appearing with Synergy mode and going away without it
+- standing in for the address bar: `focus_address_bar` on Ctrl+L, the native
+  address bar staying hidden while the stand-in's editor is open, no flash when
+  focus moves to the stand-in, and showing again when focus goes elsewhere
+  (these are in `scripts/test-synergy-mode.mjs`, since they need the window)
 
 The `address_bar` suggestions (what you type in the browser itself) are not
 covered, because the test can't type into the browser's own interface. They
