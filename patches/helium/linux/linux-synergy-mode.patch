@@ -432,7 +432,7 @@
        anchor_rect, arrow(), GetWidget()->client_view()->GetPreferredSize({}),
 --- /dev/null
 +++ b/chrome/browser/ui/views/helium/helium_address_bar_ipc.cc
-@@ -0,0 +1,927 @@
+@@ -0,0 +1,935 @@
 +// Copyright 2026 The Helide Authors
 +// Use of this source code is governed by the GPL-3.0 license in LICENSE.
 +
@@ -796,6 +796,8 @@
 +    state.Set("event", "state");
 +    state.Set("window", id_);
 +    state.Set("focused", focused());
++    state.Set("incognito", profile()->IsOffTheRecord());
++    state.Set("tab", tab_serial_);
 +    content::WebContents* const web_contents = contents();
 +    if (!web_contents) {
 +      return state;
@@ -812,6 +814,9 @@
 +
 + private:
 +  void ObserveActiveTab() {
++    if (contents() != web_contents()) {
++      ++tab_serial_;
++    }
 +    Observe(contents());
 +    progress_ = contents() && contents()->IsLoading()
 +                    ? contents()->GetLoadProgress()
@@ -877,6 +882,8 @@
 +  const raw_ptr<BrowserWindowInterface> browser_;
 +  const int id_;
 +  double progress_ = 1.0;
++  // Changes whenever another tab becomes the window's current one.
++  int tab_serial_ = 0;
 +  const base::RepeatingCallback<void(bool)> on_external_open_;
 +  bool external_open_ = false;
 +  raw_ptr<views::Widget> widget_;
@@ -1233,6 +1240,8 @@
 +        {"stop", IDC_STOP},
 +        {"back", IDC_BACK},
 +        {"forward", IDC_FORWARD},
++        {"new_tab", IDC_NEW_TAB},
++        {"close_tab", IDC_CLOSE_TAB},
 +    };
 +    for (const auto& [name, command_id] : kCommands) {
 +      if (*command == name) {
@@ -1351,8 +1360,7 @@
 +std::unique_ptr<AddressBarIpcRegistration> RegisterWindowForAddressBarIpc(
 +    BrowserView* browser_view,
 +    base::RepeatingCallback<void(bool open)> on_external_address_bar_open) {
-+  if (!browser_view->GetProfile() ||
-+      browser_view->GetProfile()->IsOffTheRecord()) {
++  if (!browser_view->GetProfile()) {
 +    return nullptr;
 +  }
 +  return std::make_unique<WindowSource>(
@@ -1413,7 +1421,7 @@
 +#endif  // CHROME_BROWSER_UI_VIEWS_HELIUM_HELIUM_ADDRESS_BAR_IPC_H_
 --- /dev/null
 +++ b/chrome/browser/ui/views/helium/helium_synergy_controller.cc
-@@ -0,0 +1,855 @@
+@@ -0,0 +1,864 @@
 +// Copyright 2026 The Helide Authors
 +// Use of this source code is governed by the GPL-3.0 license in LICENSE.
 +
@@ -1493,6 +1501,9 @@
 +constexpr base::TimeDelta kExternalClickGrace = base::Milliseconds(250);
 +// The same, after asking that program to open.
 +constexpr base::TimeDelta kExternalOpenGrace = base::Milliseconds(1500);
++// After the editor closes the keyboard goes back to the window, which takes the
++// compositor a moment; the address bar stays hidden meanwhile (Escape).
++constexpr base::TimeDelta kExternalCloseGrace = base::Milliseconds(600);
 +
 +// How long the address bar takes to slide in or out with autohide.
 +constexpr base::TimeDelta kRevealDuration = base::Milliseconds(200);
@@ -2173,6 +2184,12 @@
 +  VLOG(1) << "Synergy: external address bar open=" << open;
 +  external_open_ = open;
 +  external_grace_timer_.Stop();
++  if (!open && !widget_->ShouldPaintAsActive()) {
++    external_grace_timer_.Start(
++        FROM_HERE, kExternalCloseGrace,
++        base::BindOnce(&SynergyController::UpdateAddressBarVisibility,
++                       base::Unretained(this)));
++  }
 +  UpdateAddressBarVisibility();
 +}
 +

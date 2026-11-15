@@ -25,7 +25,7 @@ a key), not for automation. For automation, see
 | **Format** | One JSON object per line, UTF-8, in both directions |
 | **When it exists** | While at least one window of a profile with Synergy mode is open. It is removed when Synergy mode is turned off or the browser quits. |
 | **Who can connect** | Only your user. The socket is created with mode 0600, and connections from other users are refused. Anything running as you can use it. |
-| **What it reports** | Every normal window, each with the page in its current tab. Incognito windows are never reported. |
+| **What it reports** | Every normal window, incognito ones included (marked `incognito`), each with the page in its current tab. |
 | **What it can't do** | Read pages, cookies, passwords or history. It can't run scripts in pages or open `javascript:` URLs. |
 | **Only one browser** | Only one Helide serves the socket. If another Helide (another profile directory) already does, the second one leaves it alone. |
 
@@ -105,6 +105,8 @@ the first one.
 | `reload_bypassing_cache` | | Like Shift+reload |
 | `stop` | | `"ok": false` if the page isn't loading |
 | `back`, `forward` | | `"ok": false` if there is nothing to go to |
+| `new_tab` | | Opens a new tab in the window, as Ctrl+T does |
+| `close_tab` | | Closes the window's current tab, as Ctrl+W does |
 | `register_address_bar` | | Makes this connection a [stand-in for the address bar](#standing-in-for-the-address-bar) |
 | `unregister_address_bar` | | |
 | `address_bar_open` | `open`: true or false. The window comes from `window`, as for other requests. | Says whether the stand-in's editor is open for that window. Needs `register_address_bar` first. |
@@ -133,7 +135,7 @@ Sent on subscribing, and whenever a window's current tab, page, title, loading
 state or focus changes. `list` returns the same objects.
 
 ```json
-{"event":"state","window":1234,"focused":true,
+{"event":"state","window":1234,"focused":true,"incognito":false,"tab":3,
  "url":"https://example.com/","title":"Example Domain",
  "loading":true,"progress":0.42,"can_go_back":true,"can_go_forward":false}
 ```
@@ -142,6 +144,8 @@ state or focus changes. `list` returns the same objects.
 | --- | --- |
 | `window` | The window's id, stable while it is open |
 | `focused` | Whether it is the focused window |
+| `incognito` | Whether it is an incognito window |
+| `tab` | A number that changes whenever another tab becomes the window's current one (switching tabs, a new tab, closing one). Compare it with the last one to tell a tab switch from a navigation. |
 | `url` | The URL the address bar shows |
 | `title` | The tab's title |
 | `loading` | Whether the page is loading |
@@ -227,6 +231,16 @@ Helide gives you some slack so there is no flash while you do this:
 - When the window loses focus while a stand-in is registered, it waits a
   quarter of a second before showing its own, in case focus went to the
   stand-in.
+- After `open: false` (Escape in your editor), it waits up to 0.6 seconds for
+  the keyboard to come back to the window before showing its own, so it
+  doesn't flash while the compositor moves focus back.
+
+Shortcuts typed into your editor reach your program, not the browser. Pass on
+the ones that should still work with `new_tab` and `close_tab`. After
+`new_tab`, the new tab page sends `focus_address_bar` again, so your editor can
+start over for it. When the window's `tab` changes while your editor is open
+(the user switched tabs some other way), its address is out of date; closing
+the editor gives the keyboard back to the page.
 
 If your editor closes with `open: false` and another window has focus, the
 browser's address bar slides in. If the stand-in disconnects, any editor it had
