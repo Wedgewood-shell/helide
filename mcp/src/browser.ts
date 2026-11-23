@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { chromium, type Browser, type Page, type ElementHandle, type Dialog, type Download } from 'playwright-core';
 
@@ -13,6 +13,23 @@ export function validateEndpoint(value: string): string {
   return url.origin;
 }
 
+function firstLine(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return (message.split('\n').find(line => line.trim())?.trim() ?? 'unknown error').replace(/\.+$/, '');
+}
+
+// Best effort, Linux only: start time of a pid from /proc.
+async function processStart(pid: number): Promise<string | null> {
+  try {
+    const stat = await readFile(`/proc/${pid}/stat`, 'utf8');
+    // Field 22 (starttime, clock ticks since boot); split after the "(comm)" field.
+    const ticks = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19]);
+    const btime = Number(/^btime (\d+)$/m.exec(await readFile('/proc/stat', 'utf8'))?.[1]);
+    if (!Number.isFinite(ticks) || !Number.isFinite(btime)) return null;
+    return new Date((btime + ticks / 100) * 1000).toISOString();
+  } catch { return null; }
+}
+
 type Tab = { id: string; page: Page; owned: boolean; epoch: number };
 type Ref = { tab: Tab; epoch: number; handle: ElementHandle<Element> };
 type Transfer = { id: string; tab_id: string; download: Download; state: string; error?: string };
@@ -21,6 +38,7 @@ export class HeliumBrowser {
   readonly endpoint: string;
   readonly artifacts: string;
   private browser?: Browser;
+  private connectedAt?: string;
   private connection?: Promise<Browser>;
   private tabs = new Map<string, Tab>();
   private pages = new WeakMap<Page, Tab>();
@@ -38,27 +56,59 @@ export class HeliumBrowser {
   async connect(): Promise<Browser> {
     if (this.browser?.isConnected()) return this.browser;
     if (!this.connection) {
-      this.connection = chromium.connectOverCDP(this.endpoint, { timeout: 5000 }).then(browser => {
-        this.browser = browser;
-        browser.on('disconnected', () => {
-          this.browser = undefined;
-          this.tabs.clear();
-          this.pages = new WeakMap();
-          this.refs.clear();
-          this.dialogs.clear();
-          this.transfers.clear();
-          this.transferOrder = [];
-        });
-        for (const context of browser.contexts()) {
-          for (const page of context.pages()) this.register(page, false);
-          context.on('page', page => this.register(page, false));
-        }
-        return browser;
-      }).catch(() => {
-        throw new Error(`Cannot connect to Helide at ${this.endpoint}. Start your patched Helide and enable Settings → Behavior → Let AI agents control Helide. No browser was launched.`);
-      }).finally(() => { this.connection = undefined; });
+      this.connection = this.attach().finally(() => { this.connection = undefined; });
     }
     return this.connection;
+  }
+
+  private async attach(): Promise<Browser> {
+    let browser: Browser;
+    try {
+      browser = await chromium.connectOverCDP(this.endpoint, { timeout: 5000 });
+    } catch (error) {
+      throw await this.attachError(error);
+    }
+    this.browser = browser;
+    this.connectedAt = new Date().toISOString();
+    browser.on('disconnected', () => {
+      this.browser = undefined;
+      this.connectedAt = undefined;
+      this.tabs.clear();
+      this.pages = new WeakMap();
+      this.refs.clear();
+      this.dialogs.clear();
+      this.transfers.clear();
+      this.transferOrder = [];
+    });
+    // A bad target must not look like a connection failure.
+    for (const context of browser.contexts()) {
+      for (const page of context.pages()) this.safeRegister(page);
+      context.on('page', page => this.safeRegister(page));
+    }
+    return browser;
+  }
+
+  // Distinguish "nothing listening" from "HTTP answers but the attach is refused".
+  private async attachError(error: unknown): Promise<Error> {
+    const cause = firstLine(error);
+    let product: string | undefined;
+    try {
+      const response = await fetch(`${this.endpoint}/json/version`, { signal: AbortSignal.timeout(1500) });
+      if (response.ok) product = String((await response.json() as { Browser?: string }).Browser ?? 'unknown browser');
+    } catch { /* HTTP endpoint not reachable */ }
+    if (product) {
+      return new Error(`Helide at ${this.endpoint} answers DevTools HTTP (${product}) but the CDP attach failed: ${cause}. ` +
+        'Agent Access may not have taken effect or the browser session is stale: toggle Settings → Behavior → Let AI agents control Helide off and on, or restart Helide. No browser was launched.',
+        { cause: error });
+    }
+    return new Error(`Cannot connect to Helide at ${this.endpoint} (${cause}). Start your patched Helide and enable Settings → Behavior → Let AI agents control Helide. No browser was launched.`,
+      { cause: error });
+  }
+
+  private safeRegister(page: Page): void {
+    try { this.register(page, false); } catch (error) {
+      console.error(`helide-mcp: failed to register page ${page.url()}: ${firstLine(error)}`);
+    }
   }
 
   private register(page: Page, owned: boolean): Tab {
@@ -113,7 +163,16 @@ export class HeliumBrowser {
 
   async status() {
     const browser = await this.connect();
+    let pid: number | null = null;
+    try {
+      const session = await browser.newBrowserCDPSession();
+      try {
+        const { processInfo } = await session.send('SystemInfo.getProcessInfo') as { processInfo: { type: string; id: number }[] };
+        pid = processInfo.find(p => p.type === 'browser')?.id ?? null;
+      } finally { await session.detach().catch(() => {}); }
+    } catch { /* optional diagnostics */ }
     return { connected: true, endpoint: this.endpoint, version: browser.version(),
+      browser_pid: pid, browser_started_at: pid ? await processStart(pid) : null, connected_at: this.connectedAt ?? null,
       transport: 'CDP', attach_only: true, background_only_requires_patched_helium: true,
       capabilities: ['tabs', 'semantic_elements', 'read', 'input', 'screenshots', 'dialogs', 'uploads', 'download_observation'],
       unsupported: ['global_history', 'media_controls', 'capture_controls'] };
