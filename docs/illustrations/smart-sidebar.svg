@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="720" height="260" viewBox="0 0 720 260" role="img" aria-labelledby="title desc">
   <title id="title">Smart sidebar collapse</title>
-  <desc id="desc">A browser window wider than 65% of the screen shows the vertical tab strip with titles. When the window is made narrower than that, the strip collapses to icons. A three-finger swipe over the collapsed strip shows a glowing pill with the tab's title, growing out of the strip over the page.</desc>
+  <desc id="desc">A browser window wider than 65% of the screen shows the vertical tab strip with titles. When the window is made narrower than that, the strip collapses to icons. A three-finger swipe over the collapsed strip makes each tab's pill, with its title, grow out of the strip in place and shrink back as the swipe passes over it, like a standing wave.</desc>
   <defs>
     <filter id="soft" x="-30%" y="-80%" width="160%" height="260%"><feGaussianBlur stdDeviation="6"/></filter>
     <filter id="shadow" x="-20%" y="-60%" width="140%" height="220%"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity=".45"/></filter>
@@ -8,21 +8,25 @@
       text{font-family:system-ui,sans-serif;fill:#D5D6DB}.small{font-size:11px;fill:#787C99}.tab{font-size:12px}
       .wide{animation:wide 9s ease-in-out infinite}
       .narrow{opacity:0;animation:narrow 9s ease-in-out infinite}
-      .pill{opacity:0;animation:pill 9s ease-in-out infinite}
-      .label-a{animation:label-a 9s ease-in-out infinite}
-      .label-b{opacity:0;animation:label-b 9s ease-in-out infinite}
-      @keyframes label-a{0%,58%{opacity:1}64%,100%{opacity:0}}
-      @keyframes label-b{0%,72%{opacity:0}78%,100%{opacity:1}}
+      .w1,.w2,.w3{opacity:0}.c1,.c2,.c3{transform-origin:64px 0;transform:scaleX(.3)}
+      .w1{animation:w1 9s linear infinite}.c1{animation:c1 9s linear infinite}
+      .w2{animation:w2 9s linear infinite}.c2{animation:c2 9s linear infinite}
+      .w3{animation:w3 9s linear infinite}.c3{animation:c3 9s linear infinite}
+      @keyframes w1{0%,50%{opacity:0}56%{opacity:1}66%,100%{opacity:0}}
+      @keyframes c1{0%,50%{transform:scaleX(.3)}56%{transform:scaleX(1)}66%,100%{transform:scaleX(.3)}}
+      @keyframes w2{0%,56%{opacity:0}66%{opacity:1}76%,100%{opacity:0}}
+      @keyframes c2{0%,56%{transform:scaleX(.3)}66%{transform:scaleX(1)}76%,100%{transform:scaleX(.3)}}
+      @keyframes w3{0%,66%{opacity:0}76%,86%{opacity:1}92%,100%{opacity:0}}
+      @keyframes c3{0%,66%{transform:scaleX(.3)}76%,100%{transform:scaleX(1)}}
       .hint-a{animation:hint-a 9s ease-in-out infinite}
       .hint-b{opacity:0;animation:hint-b 9s ease-in-out infinite}
       .hint-c{opacity:0;animation:hint-c 9s ease-in-out infinite}
       @keyframes wide{0%,28%{opacity:1}34%,94%{opacity:0}100%{opacity:1}}
       @keyframes narrow{0%,28%{opacity:0}34%,94%{opacity:1}100%{opacity:0}}
-      @keyframes pill{0%,50%{opacity:0;transform:translateY(0)}56%{opacity:1;transform:translateY(0)}78%,86%{opacity:1;transform:translateY(64px)}92%,100%{opacity:0;transform:translateY(64px)}}
       @keyframes hint-a{0%,28%{opacity:1}32%,96%{opacity:0}100%{opacity:1}}
       @keyframes hint-b{0%,30%{opacity:0}34%,48%{opacity:1}52%,100%{opacity:0}}
       @keyframes hint-c{0%,50%{opacity:0}54%,92%{opacity:1}96%,100%{opacity:0}}
-      @media(prefers-reduced-motion:reduce){.motion{animation:none!important}.wide{opacity:0}.narrow{opacity:1}.pill{opacity:1;transform:translateY(64px)}.label-a{opacity:0}.label-b{opacity:1}.hint-a,.hint-b{opacity:0}.hint-c{opacity:1}}
+      @media(prefers-reduced-motion:reduce){.motion{animation:none!important}.wide{opacity:0}.narrow{opacity:1}.w3{opacity:1}.c3{transform:scaleX(1)}.hint-a,.hint-b{opacity:0}.hint-c{opacity:1}}
     </style>
   </defs>
   <rect width="720" height="260" rx="16" fill="#0e1017"/>
@@ -64,13 +68,28 @@
     <circle cx="84" cy="179" r="5" fill="#E0AF68"/>
   </g>
 
-  <!-- swiping over the collapsed strip: the glow grows into a pill with the title -->
-  <g class="pill motion">
-    <rect x="71" y="102" width="96" height="26" rx="8" fill="#8698df" opacity=".75" filter="url(#soft)"/>
-    <rect x="71" y="102" width="96" height="26" rx="8" fill="#1a1d2b" filter="url(#shadow)"/>
-    <rect x="71" y="102" width="96" height="26" rx="8" fill="#8698df" fill-opacity=".2" stroke="#8698df" stroke-width="1.5"/>
-    <g class="label-a motion"><circle cx="84" cy="115" r="5" fill="#41A6B5"/><text x="102" y="119" class="tab">Docs</text></g>
-    <g class="label-b motion"><circle cx="84" cy="115" r="5" fill="#E0AF68"/><text x="102" y="119" class="tab">Maps</text></g>
+  <!-- swiping over the collapsed strip: a standing wave. Each tab's pill
+       grows out of the strip in place and shrinks back as the swipe passes -->
+  <clipPath id="clip1"><rect class="c1 motion" x="64" y="88" width="110" height="54"/></clipPath>
+  <g class="w1 motion" clip-path="url(#clip1)">
+    <rect x="71" y="102" width="90" height="26" rx="8" fill="#8698df" opacity=".75" filter="url(#soft)"/>
+    <rect x="71" y="102" width="90" height="26" rx="8" fill="#1a1d2b" filter="url(#shadow)"/>
+    <rect x="71" y="102" width="90" height="26" rx="8" fill="#8698df" fill-opacity=".2" stroke="#8698df" stroke-width="1.5"/>
+    <circle cx="84" cy="115" r="5" fill="#41A6B5"/><text x="102" y="119" class="tab">Docs</text>
+  </g>
+  <clipPath id="clip2"><rect class="c2 motion" x="64" y="120" width="106" height="54"/></clipPath>
+  <g class="w2 motion" clip-path="url(#clip2)">
+    <rect x="71" y="134" width="86" height="26" rx="8" fill="#8698df" opacity=".75" filter="url(#soft)"/>
+    <rect x="71" y="134" width="86" height="26" rx="8" fill="#1a1d2b" filter="url(#shadow)"/>
+    <rect x="71" y="134" width="86" height="26" rx="8" fill="#8698df" fill-opacity=".2" stroke="#8698df" stroke-width="1.5"/>
+    <circle cx="84" cy="147" r="5" fill="#F7768E"/><text x="102" y="151" class="tab">Mail</text>
+  </g>
+  <clipPath id="clip3"><rect class="c3 motion" x="64" y="152" width="110" height="54"/></clipPath>
+  <g class="w3 motion" clip-path="url(#clip3)">
+    <rect x="71" y="166" width="90" height="26" rx="8" fill="#8698df" opacity=".75" filter="url(#soft)"/>
+    <rect x="71" y="166" width="90" height="26" rx="8" fill="#1a1d2b" filter="url(#shadow)"/>
+    <rect x="71" y="166" width="90" height="26" rx="8" fill="#8698df" fill-opacity=".2" stroke="#8698df" stroke-width="1.5"/>
+    <circle cx="84" cy="179" r="5" fill="#E0AF68"/><text x="102" y="183" class="tab">Maps</text>
   </g>
 
   <text x="360" y="248" text-anchor="middle" class="small hint-a motion">WIDE: TITLES IN THE STRIP</text>

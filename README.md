@@ -61,10 +61,10 @@ With vertical tabs, the toolbar row folds into the tab strip: the address bar at
 ### Smart sidebar collapse
 
 <p align="center">
-  <img src="docs/illustrations/smart-sidebar.svg" alt="A window narrower than 65% of the screen collapses its vertical tab strip to icons; swiping over it shows the tab titles in pills that grow out over the page." width="720">
+  <img src="docs/illustrations/smart-sidebar.svg" alt="A window narrower than 65% of the screen collapses its vertical tab strip to icons; swiping over it makes each tab's title pill swell out over the page in place and shrink back as the swipe passes." width="720">
 </p>
 
-The vertical tab strip collapses by itself when the window gets narrower than 65% of the screen, and expands when it gets wider. Scrub through a collapsed strip and the titles grow out of it. [Smart sidebar collapse](#smart-sidebar-collapse-1).
+The vertical tab strip collapses by itself when the window gets narrower than 65% of the screen, and expands when it gets wider. Scrub through a collapsed strip and each tab's title swells out of it in place as you pass, like a standing wave. [Smart sidebar collapse](#smart-sidebar-collapse-1).
 
 ### Linux-aware Energy Saver
 
@@ -521,7 +521,7 @@ With the vertical tab layout, **Settings → Appearance → Layout → Smart sid
 - **Narrower than 65% of the screen** (the display the window is on): the strip collapses to icons.
 - **65% or wider:** it expands.
 - **When it applies:** when the window opens and whenever its width changes. Moving the window or changing only its height does nothing. A collapse or expand by hand (the collapse button, its shortcut, or Synergy mode opening the address bar in a collapsed strip) holds until the next width change. Minimized and fullscreen windows are left alone.
-- **Scrubbing a collapsed strip:** with [three-finger swipes](#switch-tabs-with-three-finger-swipes), the glow becomes a pill that covers the tab's icon and grows out of the strip over the page with the tab's title. Between two tabs the pill slides and stretches from one to the next while the titles cross-fade. With a right-aligned strip the pill grows to the left. A collapsed strip expanded under the pointer shows its titles itself, so it gets the ordinary glow.
+- **Scrubbing a collapsed strip:** with [three-finger swipes](#switch-tabs-with-three-finger-swipes), the glow becomes a pill that covers the tab's icon and grows out of the strip over the page with the tab's title. It moves like a standing wave, not a travelling one: every pill stays on its own tab and only swells and subsides. Between two tabs, the one behind shrinks back into the strip while the one ahead grows out, each by how close the swipe is to it, and the pill's edge uncovers the title rather than squeezing it. With a right-aligned strip the pills grow to the left. A collapsed strip expanded under the pointer shows its titles itself, so it gets the ordinary glow.
 
 Turning it off leaves the strip as it is; collapse and expand it by hand as before.
 
