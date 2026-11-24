@@ -32,6 +32,50 @@
    </settings-toggle-button>
    <settings-toggle-button class="hr" id="synergyMode"
        ?hidden="${!this.showVerticalSettings_()}"
+--- a/chrome/browser/ui/animation/browser_animation_controller.cc
++++ b/chrome/browser/ui/animation/browser_animation_controller.cc
+@@ -6,6 +6,7 @@
+ 
+ #include <algorithm>
+ #include <concepts>
++#include <cstdint>
+ #include <memory>
+ #include <optional>
+ #include <ranges>
+@@ -488,6 +489,7 @@
+   void Start(BrowserAnimationMotion motion, MotionInfo motion_info) {
+     const auto params = GetParamsLookup();
+     OnCancel(params);
++    ++start_count_;
+     current_motion_ = motion;
+     current_motion_info_ = std::move(motion_info);
+     UpdateCurrentValues(base::Milliseconds(0), 0.0, params);
+@@ -619,7 +621,16 @@
+       logger_->MaybeLog();
+       logger_.reset();
+     }
++    // Helide: a listener may start the next motion of this group from the
++    // end of this one (a vertical tab strip that finishes collapsing while
++    // an expand-on-hover lock is held expands on hover right away). That
++    // motion is now the current one and its animator is running; clearing it
++    // would leave the animator stepping a group with no motion.
++    const uint64_t start_count = start_count_;
+     Notify(BrowserAnimationUpdate::kEnded);
++    if (start_count != start_count_) {
++      return;
++    }
+     current_motion_ = BrowserAnimationMotion();
+     PersistCurrentValues(params);
+   }
+@@ -704,6 +715,8 @@
+ 
+   ValueLookup persisted_values_;
+   ValueLookup current_values_;
++  // How many motions have started, to notice one started by a listener.
++  uint64_t start_count_ = 0;
+   BrowserAnimationMotion current_motion_;
+   MotionInfo current_motion_info_;
+   std::optional<Animator> animator_;
 --- a/chrome/browser/ui/browser_ui_prefs.cc
 +++ b/chrome/browser/ui/browser_ui_prefs.cc
 @@ -14,6 +14,7 @@
