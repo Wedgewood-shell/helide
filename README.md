@@ -58,6 +58,14 @@ Slide three fingers up or down to glow over the tabs, then lift to switch. The g
 
 With vertical tabs, the toolbar row folds into the tab strip: the address bar at its top, the buttons at its bottom, and the page gets the full window height. The address bar can also hide while you work in the window. Other programs can follow and drive the address bar through a local socket. [Synergy mode](#synergy-mode-1) and [the address bar socket](docs/address-bar-ipc.md).
 
+### Smart sidebar collapse
+
+<p align="center">
+  <img src="docs/illustrations/smart-sidebar.svg" alt="A window narrower than 65% of the screen collapses its vertical tab strip to icons; swiping over it shows the tab titles in pills that grow out over the page." width="720">
+</p>
+
+The vertical tab strip collapses by itself when the window gets narrower than 65% of the screen, and expands when it gets wider. Scrub through a collapsed strip and the titles grow out of it. [Smart sidebar collapse](#smart-sidebar-collapse-1).
+
 ### Linux-aware Energy Saver
 
 <p align="center">
@@ -160,6 +168,10 @@ The Linux patch is [`patches/helium/linux/wayland-frame-opacity.patch`](patches/
   [Synergy mode](#synergy-mode-1), and serves
   [the address bar socket](docs/address-bar-ipc.md) with it, in
   [`linux-synergy-mode.patch`](patches/helium/linux/linux-synergy-mode.patch).
+- Collapses and expands the vertical tab strip with the window's width, and
+  shows titles in pills when scrubbing a collapsed strip, in
+  [`linux-smart-sidebar-collapse.patch`](patches/helium/linux/linux-smart-sidebar-collapse.patch).
+  See [Smart sidebar collapse](#smart-sidebar-collapse-1).
 - Lets AI agents and other automation control the browser without taking it
   over, in
   [`helium-agent-access.patch`](patches/helium/linux/helium-agent-access.patch),
@@ -257,6 +269,7 @@ python3 scripts/check-frame-opacity-patch.py --patch helium/linux/helide-brandin
 python3 scripts/check-frame-opacity-patch.py --patch helium/linux/linux-window-close-toggle.patch
 python3 scripts/check-frame-opacity-patch.py --patch helium/linux/linux-three-finger-tab-scrub.patch
 python3 scripts/check-frame-opacity-patch.py --patch helium/linux/linux-synergy-mode.patch
+python3 scripts/check-frame-opacity-patch.py --patch helium/linux/linux-smart-sidebar-collapse.patch
 ```
 
 To turn edits made in `build/src` into a patch against the pinned upstream
@@ -500,6 +513,25 @@ node scripts/test-address-bar-ipc.mjs    # the socket
 ```
 
 Both run Helide against [the fake Wayland compositor](tests/fake-wayland-compositor) with temporary profiles. It can now also click and report where popups go. What they don't cover: the look of the suggestions popup and of the panels, which the fake compositor doesn't draw, and the suggestions for typing in the browser's own address bar.
+
+## Smart sidebar collapse
+
+With the vertical tab layout, **Settings → Appearance → Layout → Smart sidebar collapse** (on by default) lets the window's width decide whether the tab strip is collapsed:
+
+- **Narrower than 65% of the screen** (the display the window is on): the strip collapses to icons.
+- **65% or wider:** it expands.
+- **When it applies:** when the window opens and whenever its width changes. Moving the window or changing only its height does nothing. A collapse or expand by hand (the collapse button, its shortcut, or Synergy mode opening the address bar in a collapsed strip) holds until the next width change. Minimized and fullscreen windows are left alone.
+- **Scrubbing a collapsed strip:** with [three-finger swipes](#switch-tabs-with-three-finger-swipes), the glow becomes a pill that covers the tab's icon and grows out of the strip over the page with the tab's title. Between two tabs the pill slides and stretches from one to the next while the titles cross-fade. With a right-aligned strip the pill grows to the left. A collapsed strip expanded under the pointer shows its titles itself, so it gets the ordinary glow.
+
+Turning it off leaves the strip as it is; collapse and expand it by hand as before.
+
+### Tests
+
+```sh
+node scripts/test-smart-sidebar-collapse.mjs
+```
+
+It runs Helide against [the fake Wayland compositor](tests/fake-wayland-compositor), which can now resize the window (`resize W H`) on its 1280×800 output. It covers collapsing below and expanding above 65%, height-only changes, the setting being off, a collapsed strip restored into a wide window, and the pill reaching over the page while scrubbing. The other end-to-end tests turn the feature off, so their windows keep the strip state they ask for.
 
 ## Set the opacity
 

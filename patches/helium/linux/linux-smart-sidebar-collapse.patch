@@ -1,0 +1,845 @@
+--- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -36,6 +36,7 @@
+ #include "chrome/browser/ui/tabs/tab_strip_prefs.h"
+ #include "chrome/browser/ui/toolbar/toolbar_pref_names.h"
+ #include "chrome/common/extensions/api/settings_private.h"
++#include "chrome/common/helium_smart_sidebar_prefs.h"
+ #include "chrome/common/helium_synergy_prefs.h"
+ #include "chrome/common/helium_tab_scrub_prefs.h"
+ #include "chrome/common/pref_names.h"
+@@ -252,6 +253,8 @@
+   (*s_allowlist)[::helium::kSynergyMode] = settings_api::PrefType::kBoolean;
+   (*s_allowlist)[::helium::kSynergyAutohideAddressBar] =
+       settings_api::PrefType::kBoolean;
++  (*s_allowlist)[::helium::kSmartSidebarCollapse] =
++      settings_api::PrefType::kBoolean;
+   (*s_allowlist)[::prefs::kHeliumAgentAccessEnabled] =
+       settings_api::PrefType::kBoolean;
+ 
+--- a/chrome/browser/resources/settings/appearance_page/appearance_layout_page.html.ts
++++ b/chrome/browser/resources/settings/appearance_page/appearance_layout_page.html.ts
+@@ -31,6 +31,12 @@
+       ?hidden="${!this.showVerticalSettings_()}"
+       pref-key="helium.browser.vertical_right_aligned"
+       label="$i18n{tabStripRightAlign}">
++  </settings-toggle-button>
++  <settings-toggle-button class="hr" id="smartSidebarCollapse"
++      ?hidden="${!this.showVerticalSettings_()}"
++      pref-key="helium.browser.smart_sidebar_collapse"
++      label="$i18n{smartSidebarCollapse}"
++      sub-label="$i18n{smartSidebarCollapseDescription}">
+   </settings-toggle-button>
+   <settings-toggle-button class="hr" id="synergyMode"
+       ?hidden="${!this.showVerticalSettings_()}"
+--- a/chrome/browser/ui/browser_ui_prefs.cc
++++ b/chrome/browser/ui/browser_ui_prefs.cc
+@@ -14,6 +14,7 @@
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/upgrade_detector/upgrade_detector.h"
+ #include "chrome/common/buildflags.h"
++#include "chrome/common/helium_smart_sidebar_prefs.h"
+ #include "chrome/common/helium_synergy_prefs.h"
+ #include "chrome/common/helium_tab_scrub_prefs.h"
+ #include "chrome/common/helium_window_controls_prefs.h"
+@@ -181,6 +182,7 @@
+   registry->RegisterBooleanPref(helium::kThreeFingerTabScrubInvert, false);
+   registry->RegisterBooleanPref(helium::kSynergyMode, false);
+   registry->RegisterBooleanPref(helium::kSynergyAutohideAddressBar, false);
++  registry->RegisterBooleanPref(helium::kSmartSidebarCollapse, true);
+   registry->RegisterBooleanPref(prefs::kShowMediaButton, true);
+   registry->RegisterBooleanPref(prefs::kShowVerticalTabsCollapseButton, true);
+   registry->RegisterBooleanPref(prefs::kShowDynamicNewTabButton, true);
+--- a/chrome/browser/ui/views/frame/BUILD.gn
++++ b/chrome/browser/ui/views/frame/BUILD.gn
+@@ -2085,6 +2085,7 @@
+       "//chrome/browser/ui/browser_window",
+       "//chrome/browser/ui/views:layout_provider",
+       "//chrome/browser/ui/views/frame:browser_view_header",
++      "//chrome/browser/ui/views/helium:smart_sidebar",
+       "//chrome/browser/ui/views/helium:tab_scrub",
+       "//chrome/common:constants",
+       "//components/prefs",
+--- a/chrome/browser/ui/views/frame/browser_frame_view_linux.cc
++++ b/chrome/browser/ui/views/frame/browser_frame_view_linux.cc
+@@ -15,6 +15,7 @@
+ #include "chrome/browser/ui/views/chrome_layout_provider.h"
+ #include "chrome/browser/ui/views/frame/browser_native_widget_aura_linux.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/helium/helium_smart_sidebar_collapse.h"
+ #include "chrome/browser/ui/views/helium/helium_tab_scrubber.h"
+ #include "chrome/browser/ui/views/helium/native_frame_materials.h"
+ #include "chrome/common/helium_synergy_prefs.h"
+@@ -111,11 +112,14 @@
+       BrowserWindowInterface::TYPE_NORMAL) {
+     tab_scrubber_ =
+         std::make_unique<helium::TabScrubber>(GetBrowserView(), GetWidget());
++    smart_sidebar_collapse_ =
++        std::make_unique<helium::SmartSidebarCollapse>(GetBrowserView());
+   }
+ }
+ 
+ void BrowserFrameViewLinux::RemovedFromWidget() {
+   tab_scrubber_.reset();
++  smart_sidebar_collapse_.reset();
+   OpaqueBrowserFrameView::RemovedFromWidget();
+ }
+ 
+--- a/chrome/browser/ui/views/frame/browser_frame_view_linux.h
++++ b/chrome/browser/ui/views/frame/browser_frame_view_linux.h
+@@ -16,6 +16,7 @@
+ class PrefChangeRegistrar;
+ 
+ namespace helium {
++class SmartSidebarCollapse;
+ class TabScrubber;
+ }  // namespace helium
+ 
+@@ -83,6 +84,8 @@
+   std::unique_ptr<PrefChangeRegistrar> window_controls_pref_registrar_;
+   // Three-finger tab scrubbing for this window.
+   std::unique_ptr<helium::TabScrubber> tab_scrubber_;
++  // Collapses the vertical tab strip in narrow windows.
++  std::unique_ptr<helium::SmartSidebarCollapse> smart_sidebar_collapse_;
+ 
+   base::ScopedObservation<ui::LinuxUi, ui::WindowButtonOrderObserver>
+       window_button_order_observation_{this};
+--- a/chrome/browser/ui/views/helium/BUILD.gn
++++ b/chrome/browser/ui/views/helium/BUILD.gn
+@@ -18,12 +18,14 @@
+   public_deps = [
+     "//base",
+     "//ui/aura",
++    "//ui/base",
+     "//ui/events",
+     "//ui/views",
+   ]
+   deps = [
+     "//chrome/browser/profiles:profile",
+     "//chrome/browser/ui/browser_window",
++    "//chrome/browser/ui/color:color_headers",
+     "//chrome/browser/ui/tabs",
+     "//chrome/browser/ui/views/frame:browser_view_header",
+     "//chrome/browser/ui/views/frame:contents_container_view",
+@@ -40,3 +42,25 @@
+     "//ui/gfx",
+   ]
+ }
++
++# Smart sidebar collapse: the vertical tab strip collapses in windows narrower
++# than 65% of the screen, and expands in wider ones.
++source_set("smart_sidebar") {
++  sources = [
++    "helium_smart_sidebar_collapse.cc",
++    "helium_smart_sidebar_collapse.h",
++  ]
++  public_deps = [
++    "//base",
++    "//components/prefs",
++    "//ui/views",
++  ]
++  deps = [
++    "//chrome/browser/profiles:profile",
++    "//chrome/browser/ui/browser_window",
++    "//chrome/browser/ui/tabs",
++    "//chrome/browser/ui/views/frame:browser_view_header",
++    "//chrome/common:constants",
++    "//ui/display",
++  ]
++}
+--- a/chrome/browser/ui/views/helium/helium_tab_scrub_glow_view.cc
++++ b/chrome/browser/ui/views/helium/helium_tab_scrub_glow_view.cc
+@@ -3,9 +3,12 @@
+ 
+ #include "chrome/browser/ui/views/helium/helium_tab_scrub_glow_view.h"
+ 
++#include <algorithm>
++#include <cmath>
+ #include <utility>
+ 
+ #include "cc/paint/paint_flags.h"
++#include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "third_party/skia/include/core/SkClipOp.h"
+ #include "third_party/skia/include/core/SkColor.h"
+ #include "third_party/skia/include/core/SkRRect.h"
+@@ -14,12 +17,17 @@
+ #include "ui/color/color_provider.h"
+ #include "ui/compositor/layer.h"
+ #include "ui/gfx/canvas.h"
++#include "ui/gfx/font_list.h"
++#include "ui/gfx/geometry/rect_conversions.h"
++#include "ui/gfx/image/image_skia.h"
+ #include "ui/gfx/geometry/insets_f.h"
+ #include "ui/gfx/geometry/skia_conversions.h"
+ #include "ui/gfx/geometry/vector2d.h"
+ #include "ui/gfx/scoped_canvas.h"
+ #include "ui/gfx/shadow_value.h"
+ #include "ui/gfx/skia_paint_util.h"
++#include "ui/views/style/typography.h"
++#include "ui/views/style/typography_provider.h"
+ 
+ namespace helium {
+ 
+@@ -28,6 +36,21 @@
+ // Blur radius of the halo, in DIPs.
+ constexpr int kHaloBlur = 24;
+ constexpr float kOutlineWidth = 1.5f;
++
++// Pills for a collapsed strip.
++constexpr int kFaviconSize = 16;
++// Room after the title, to the end of the pill.
++constexpr float kPillEndPadding = 12.0f;
++// Titles longer than this are cut off with an ellipsis.
++constexpr float kPillMaxTitleWidth = 280.0f;
++// The drop shadow that lifts the pill off the page.
++constexpr int kPillShadowBlur = 12;
++constexpr int kPillShadowOffsetY = 2;
++
++const gfx::FontList& PillFont() {
++  return views::TypographyProvider::Get().GetFont(views::style::CONTEXT_LABEL,
++                                                  views::style::STYLE_PRIMARY);
++}
+ 
+ }  // namespace
+ 
+@@ -40,6 +63,18 @@
+ 
+ TabScrubGlowView::~TabScrubGlowView() = default;
+ 
++// static
++float TabScrubGlowView::PillWidth(const std::u16string& title,
++                                  float tab_width) {
++  if (title.empty()) {
++    return tab_width;
++  }
++  const float title_width = std::min(
++      std::ceil(gfx::Canvas::GetStringWidthF(title, PillFont())),
++      kPillMaxTitleWidth);
++  return tab_width + title_width + kPillEndPadding;
++}
++
+ void TabScrubGlowView::SetShapes(std::vector<Shape> shapes) {
+   shapes_ = std::move(shapes);
+   SchedulePaint();
+@@ -56,6 +91,10 @@
+     gfx::ScopedCanvas scoped(canvas);
+     if (shape.clip) {
+       canvas->ClipRect(*shape.clip);
++    }
++
++    if (!shape.labels.empty()) {
++      PaintPillBody(canvas, shape);
+     }
+ 
+     const SkRRect outline = SkRRect::MakeRectXY(
+@@ -92,6 +131,77 @@
+     gfx::RectF edge = shape.bounds;
+     edge.Inset(kOutlineWidth / 2);
+     canvas->DrawRoundRect(edge, shape.corner_radius, edge_flags);
++
++    if (!shape.labels.empty()) {
++      PaintPillLabels(canvas, shape);
++    }
++  }
++}
++
++void TabScrubGlowView::PaintPillBody(gfx::Canvas* canvas,
++                                     const Shape& shape) {
++  const SkColor background = SkColorSetA(
++      GetColorProvider()->GetColor(kColorTabBackgroundActiveFrameActive),
++      SK_AlphaOPAQUE);
++
++  // An opaque body with a soft shadow, so the title reads over the page.
++  cc::PaintFlags body_flags;
++  body_flags.setAntiAlias(true);
++  body_flags.setColor(background);
++  body_flags.setLooper(gfx::CreateShadowDrawLooper({gfx::ShadowValue(
++      gfx::Vector2d(0, kPillShadowOffsetY), kPillShadowBlur,
++      SkColorSetA(SK_ColorBLACK, 0x40))}));
++  canvas->DrawRoundRect(shape.bounds, shape.corner_radius, body_flags);
++}
++
++void TabScrubGlowView::PaintPillLabels(gfx::Canvas* canvas,
++                                       const Shape& shape) {
++  const ui::ColorProvider* provider = GetColorProvider();
++  const SkColor foreground =
++      provider->GetColor(kColorTabForegroundActiveFrameActive);
++
++  // The end over the tab holds the favicon, where the tab shows it.
++  const float icon_width = std::min(shape.icon_area_width, shape.bounds.width());
++  const gfx::RectF icon_area(
++      shape.grows_left ? shape.bounds.right() - icon_width : shape.bounds.x(),
++      shape.bounds.y(), icon_width, shape.bounds.height());
++  const gfx::RectF title_area(
++      shape.grows_left ? shape.bounds.x() + kPillEndPadding : icon_area.right(),
++      shape.bounds.y(),
++      std::max(0.0f,
++               shape.bounds.width() - icon_width - kPillEndPadding),
++      shape.bounds.height());
++
++  gfx::ScopedCanvas clip_scope(canvas);
++  canvas->ClipRect(gfx::ToEnclosingRect(shape.bounds));
++  for (const Label& label : shape.labels) {
++    if (label.opacity <= 0.0f) {
++      continue;
++    }
++    canvas->SaveLayerAlpha(
++        static_cast<uint8_t>(std::clamp(label.opacity, 0.0f, 1.0f) * 255));
++
++    if (!label.favicon.IsEmpty()) {
++      const gfx::ImageSkia favicon = label.favicon.Rasterize(provider);
++      if (!favicon.isNull()) {
++        const gfx::PointF center = icon_area.CenterPoint();
++        canvas->DrawImageInt(favicon, 0, 0, favicon.width(), favicon.height(),
++                             static_cast<int>(
++                                 std::round(center.x() - kFaviconSize / 2.0f)),
++                             static_cast<int>(
++                                 std::round(center.y() - kFaviconSize / 2.0f)),
++                             kFaviconSize, kFaviconSize, /*filter=*/true);
++      }
++    }
++
++    if (!label.title.empty() && title_area.width() > 0) {
++      canvas->DrawStringRectWithFlags(
++          label.title, PillFont(), foreground,
++          gfx::ToEnclosingRect(title_area),
++          shape.grows_left ? gfx::Canvas::TEXT_ALIGN_RIGHT
++                           : gfx::Canvas::TEXT_ALIGN_LEFT);
++    }
++    canvas->Restore();
+   }
+ }
+ 
+--- a/chrome/browser/ui/views/helium/helium_tab_scrub_glow_view.h
++++ b/chrome/browser/ui/views/helium/helium_tab_scrub_glow_view.h
+@@ -5,9 +5,11 @@
+ #define CHROME_BROWSER_UI_VIEWS_HELIUM_HELIUM_TAB_SCRUB_GLOW_VIEW_H_
+ 
+ #include <optional>
++#include <string>
+ #include <vector>
+ 
+ #include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/base/models/image_model.h"
+ #include "ui/gfx/geometry/rect.h"
+ #include "ui/gfx/geometry/rect_f.h"
+ #include "ui/views/view.h"
+@@ -20,6 +22,15 @@
+   METADATA_HEADER(TabScrubGlowView, views::View)
+ 
+  public:
++  // The title of a tab in a collapsed strip, shown in a pill that grows out
++  // of the strip over the page.
++  struct Label {
++    std::u16string title;
++    ui::ImageModel favicon;
++    // Labels cross-fade while the glow is between two tabs.
++    float opacity = 1.0f;
++  };
++
+   struct Shape {
+     // In this view's coordinates.
+     gfx::RectF bounds;
+@@ -30,7 +41,20 @@
+     // Panes are large, so they get an outline and a faint fill; tabs get a
+     // stronger fill.
+     bool is_pane = false;
++
++    // A pill for a collapsed strip: the glow covers the tab and grows out of
++    // the strip to show the title. The pill gets an opaque background so the
++    // title reads over the page.
++    std::vector<Label> labels;
++    // Width of the end of the pill over the tab itself; the favicon is
++    // centred in it, the title follows it.
++    float icon_area_width = 0.0f;
++    // The pill grows to the left (a right-aligned strip) instead of right.
++    bool grows_left = false;
+   };
++
++  // The width of a pill for a tab `tab_width` wide with this title.
++  static float PillWidth(const std::u16string& title, float tab_width);
+ 
+   TabScrubGlowView();
+   TabScrubGlowView(const TabScrubGlowView&) = delete;
+@@ -43,6 +67,9 @@
+   void OnPaint(gfx::Canvas* canvas) override;
+ 
+  private:
++  void PaintPillBody(gfx::Canvas* canvas, const Shape& shape);
++  void PaintPillLabels(gfx::Canvas* canvas, const Shape& shape);
++
+   std::vector<Shape> shapes_;
+ };
+ 
+--- a/chrome/browser/ui/views/helium/helium_tab_scrubber.cc
++++ b/chrome/browser/ui/views/helium/helium_tab_scrubber.cc
+@@ -15,6 +15,7 @@
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
++#include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/contents_container_view.h"
+ #include "chrome/browser/ui/views/frame/contents_web_view.h"
+@@ -47,6 +48,13 @@
+ constexpr int kStripClipOutset = 6;
+ constexpr float kTabCornerRadius = 8.0f;
+ constexpr float kPaneCornerRadius = 12.0f;
++// Tabs up to this wide are drawn as icons. A collapsed strip is 42 DIPs wide
++// (VerticalTabStripRegionView::kCollapsedWidth); its tabs are wider only
++// while it is expanded under the pointer, when they show their titles.
++constexpr int kIconTabMaxWidth = 42;
++// A pill's title fades to the next tab's between this fraction of the way
++// and the same distance from the end.
++constexpr double kLabelFadeStart = 0.3;
+ 
+ gfx::RectF Lerp(const gfx::RectF& a, const gfx::RectF& b, double t) {
+   const auto mix = [t](float from, float to) {
+@@ -347,6 +355,13 @@
+     strip_clip = gfx::ToEnclosingRect(BoundsInBrowserView(strip));
+     strip_clip->Outset(kStripClipOutset);
+   }
++  // Pills grow out of the strip over the page, so only the ends of the strip
++  // cut them off.
++  std::optional<gfx::Rect> pill_clip;
++  if (strip_clip) {
++    pill_clip = gfx::Rect(0, strip_clip->y(), browser_view->width(),
++                          strip_clip->height());
++  }
+ 
+   std::vector<TabScrubGlowView::Shape> shapes;
+   const std::vector<TabItem> tabs = GatherTabs();
+@@ -356,12 +371,8 @@
+         tabs[position_->start_index()].model_index != start_model_index_) {
+       return false;
+     }
+-    TabScrubGlowView::Shape tab_shape;
+-    tab_shape.bounds = Lerp(BoundsInBrowserView(tabs[low].view),
+-                            BoundsInBrowserView(tabs[high].view), fraction);
+-    tab_shape.corner_radius = kTabCornerRadius;
+-    tab_shape.clip = strip_clip;
+-    shapes.push_back(tab_shape);
++    shapes.push_back(TabShape(tabs[low].view, tabs[high].view, fraction,
++                              strip_clip, pill_clip));
+ 
+     const int nearest = position_->NearestIndex();
+     if (nearest != last_scrolled_item_) {
+@@ -394,17 +405,113 @@
+     const views::View* low_tab = tab_for(panes[low].model_index);
+     const views::View* high_tab = tab_for(panes[high].model_index);
+     if (low_tab && high_tab) {
+-      TabScrubGlowView::Shape tab_shape;
+-      tab_shape.bounds = Lerp(BoundsInBrowserView(low_tab),
+-                              BoundsInBrowserView(high_tab), fraction);
+-      tab_shape.corner_radius = kTabCornerRadius;
+-      tab_shape.clip = strip_clip;
+-      shapes.push_back(tab_shape);
++      shapes.push_back(
++          TabShape(low_tab, high_tab, fraction, strip_clip, pill_clip));
+     }
+   }
+ 
+   overlay->SetShapes(std::move(shapes));
+   return true;
++}
++
++bool TabScrubber::IsStripCollapsed(bool* right_aligned) {
++  *right_aligned = false;
++  auto* browser_view = static_cast<BrowserView*>(browser_view_.view());
++  if (!browser_view) {
++    return false;
++  }
++  const auto* controller =
++      tabs::VerticalTabStripStateController::From(browser_view->browser());
++  if (!controller || !controller->ShouldDisplayVerticalTabs()) {
++    return false;
++  }
++  *right_aligned = controller->IsTabStripRightAligned();
++  return controller->IsCollapsed();
++}
++
++std::optional<TabScrubber::Pill> TabScrubber::PillForTab(
++    const views::View* view) {
++  bool right_aligned = false;
++  if (!IsStripCollapsed(&right_aligned)) {
++    return std::nullopt;
++  }
++  // Only tabs drawn as icons; a collapsed strip expanded under the pointer
++  // shows its titles itself.
++  const TabView* tab_view = views::AsViewClass<TabView>(view);
++  if (!tab_view || tab_view->width() > kIconTabMaxWidth) {
++    return std::nullopt;
++  }
++  Pill pill;
++  pill.label.title = tab_view->data().title;
++  if (tab_view->data().should_display_favicon) {
++    pill.label.favicon = tab_view->data().favicon;
++  }
++  const gfx::RectF tab_bounds = BoundsInBrowserView(view);
++  pill.icon_area_width = tab_bounds.width();
++  pill.grows_left = right_aligned;
++  const float width =
++      TabScrubGlowView::PillWidth(pill.label.title, tab_bounds.width());
++  pill.bounds = tab_bounds;
++  pill.bounds.set_width(width);
++  if (right_aligned) {
++    pill.bounds.set_x(tab_bounds.right() - width);
++  }
++  return pill;
++}
++
++TabScrubGlowView::Shape TabScrubber::TabShape(
++    const views::View* low,
++    const views::View* high,
++    double fraction,
++    const std::optional<gfx::Rect>& strip_clip,
++    const std::optional<gfx::Rect>& pill_clip) {
++  TabScrubGlowView::Shape shape;
++  shape.corner_radius = kTabCornerRadius;
++
++  std::optional<Pill> low_pill = PillForTab(low);
++  std::optional<Pill> high_pill = PillForTab(high);
++  if (!low_pill && !high_pill) {
++    shape.bounds = Lerp(BoundsInBrowserView(low), BoundsInBrowserView(high),
++                        fraction);
++    shape.clip = strip_clip;
++    return shape;
++  }
++
++  // In a collapsed strip the glow is a pill with the title, which slides and
++  // stretches from one tab's pill to the next while the titles cross-fade.
++  const auto bounds_of = [this](const std::optional<Pill>& pill,
++                                const views::View* view) {
++    return pill ? pill->bounds : BoundsInBrowserView(view);
++  };
++  const auto icon_width_of = [this](const std::optional<Pill>& pill,
++                                    const views::View* view) {
++    return pill ? pill->icon_area_width : BoundsInBrowserView(view).width();
++  };
++  shape.bounds =
++      Lerp(bounds_of(low_pill, low), bounds_of(high_pill, high), fraction);
++  shape.icon_area_width = static_cast<float>(
++      icon_width_of(low_pill, low) +
++      (icon_width_of(high_pill, high) - icon_width_of(low_pill, low)) *
++          fraction);
++  shape.grows_left = (low_pill ? low_pill : high_pill)->grows_left;
++  shape.clip = pill_clip;
++  // The titles swap over the middle part of the way, so two of them overlap
++  // only briefly.
++  const float high_opacity =
++      low == high ? 0.0f
++                  : static_cast<float>(std::clamp(
++                        (fraction - kLabelFadeStart) /
++                            (1.0 - 2 * kLabelFadeStart),
++                        0.0, 1.0));
++  if (low_pill) {
++    low_pill->label.opacity = 1.0f - high_opacity;
++    shape.labels.push_back(std::move(low_pill->label));
++  }
++  if (high_pill && low != high) {
++    high_pill->label.opacity = high_opacity;
++    shape.labels.push_back(std::move(high_pill->label));
++  }
++  return shape;
+ }
+ 
+ std::vector<TabScrubber::TabItem> TabScrubber::GatherTabs() {
+--- a/chrome/browser/ui/views/helium/helium_tab_scrubber.h
++++ b/chrome/browser/ui/views/helium/helium_tab_scrubber.h
+@@ -11,9 +11,11 @@
+ #include "base/memory/raw_ptr.h"
+ #include "base/scoped_observation.h"
+ #include "base/time/time.h"
++#include "chrome/browser/ui/views/helium/helium_tab_scrub_glow_view.h"
+ #include "chrome/browser/ui/views/helium/helium_tab_scrub_model.h"
+ #include "ui/aura/window_observer.h"
+ #include "ui/events/event_handler.h"
++#include "ui/gfx/geometry/rect.h"
+ #include "ui/gfx/geometry/rect_f.h"
+ #include "ui/views/view_tracker.h"
+ 
+@@ -29,8 +31,6 @@
+ }
+ 
+ namespace helium {
+-
+-class TabScrubGlowView;
+ 
+ // Three-finger touchpad swipes that move through tabs, as a continuous
+ // action. It is the Linux counterpart of ChromeOS tab scrubbing, extended
+@@ -84,6 +84,14 @@
+     raw_ptr<views::View> container;
+     int model_index;
+   };
++  // The glow for one tab of a collapsed strip: a pill that covers the tab and
++  // grows out of the strip to show its title.
++  struct Pill {
++    gfx::RectF bounds;
++    float icon_area_width = 0.0f;
++    bool grows_left = false;
++    TabScrubGlowView::Label label;
++  };
+ 
+   bool IsEnabled();
+   double VerticalDelta(double dy) const;
+@@ -98,6 +106,17 @@
+   // Positions the glow for the current position. Returns false if the tabs
+   // changed under the swipe, which ends it without switching.
+   bool Refresh();
++
++  // Whether the vertical tab strip is collapsed to icons, and on which side.
++  bool IsStripCollapsed(bool* right_aligned);
++  // The pill for a tab shown as an icon in a collapsed strip.
++  std::optional<Pill> PillForTab(const views::View* view);
++  // The glow `fraction` of the way from the tab `low` to the tab `high`.
++  TabScrubGlowView::Shape TabShape(const views::View* low,
++                                   const views::View* high,
++                                   double fraction,
++                                   const std::optional<gfx::Rect>& strip_clip,
++                                   const std::optional<gfx::Rect>& pill_clip);
+ 
+   std::vector<TabItem> GatherTabs();
+   std::vector<PaneItem> GatherPanes();
+--- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
++++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+@@ -732,6 +732,11 @@
+       u"Move the address bar to the top of the tab strip and the toolbar "
+       u"buttons to its bottom, so web pages use the full window height. Not "
+       u"available in Zen mode.");
++  html_source->AddString("smartSidebarCollapse", u"Smart sidebar collapse");
++  html_source->AddString(
++      "smartSidebarCollapseDescription",
++      u"Collapse the tab strip while the window is narrower than 65% of the "
++      u"screen, and expand it while the window is wider.");
+   html_source->AddString("synergyAutohideAddressBar",
+                          u"Hide the address bar while the window is focused");
+   html_source->AddString(
+--- a/chrome/common/BUILD.gn
++++ b/chrome/common/BUILD.gn
+@@ -567,6 +567,7 @@
+     "chrome_paths.h",
+     "chrome_paths_internal.h",
+     "chrome_result_codes.h",
++    "helium_smart_sidebar_prefs.h",
+     "helium_synergy_prefs.h",
+     "helium_tab_scrub_prefs.h",
+     "helium_window_controls_prefs.h",
+--- /dev/null
++++ b/chrome/browser/ui/views/helium/helium_smart_sidebar_collapse.cc
+@@ -0,0 +1,126 @@
++// Copyright 2026 The Helide Authors
++// Use of this source code is governed by the GPL-3.0 license in LICENSE.
++
++#include "chrome/browser/ui/views/helium/helium_smart_sidebar_collapse.h"
++
++#include "base/functional/bind.h"
++#include "base/logging.h"
++#include "base/task/sequenced_task_runner.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/common/helium_smart_sidebar_prefs.h"
++#include "components/prefs/pref_service.h"
++#include "ui/display/display.h"
++#include "ui/display/screen.h"
++#include "ui/views/widget/widget.h"
++
++namespace helium {
++
++SmartSidebarCollapse::SmartSidebarCollapse(BrowserView* browser_view)
++    : browser_view_(browser_view) {
++  browser_view_observation_.Observe(browser_view_);
++  pref_change_registrar_.Init(browser_view_->GetProfile()->GetPrefs());
++  pref_change_registrar_.Add(
++      kSmartSidebarCollapse,
++      base::BindRepeating(&SmartSidebarCollapse::ScheduleApply,
++                          base::Unretained(this), /*force=*/true));
++  ScheduleApply(/*force=*/true);
++}
++
++SmartSidebarCollapse::~SmartSidebarCollapse() = default;
++
++// static
++bool SmartSidebarCollapse::ShouldCollapse(int window_width, int screen_width) {
++  return window_width < screen_width * kSmartSidebarCollapseScreenFraction;
++}
++
++void SmartSidebarCollapse::OnViewBoundsChanged(views::View* observed_view) {
++  ScheduleApply(/*force=*/false);
++}
++
++void SmartSidebarCollapse::OnViewIsDeleting(views::View* observed_view) {
++  browser_view_observation_.Reset();
++  mode_subscription_ = {};
++  pref_change_registrar_.RemoveAll();
++  browser_view_ = nullptr;
++}
++
++bool SmartSidebarCollapse::IsEnabled() const {
++  return browser_view_ &&
++         browser_view_->GetProfile()->GetPrefs()->GetBoolean(
++             kSmartSidebarCollapse);
++}
++
++void SmartSidebarCollapse::ScheduleApply(bool force) {
++  force_pending_ |= force;
++  if (apply_pending_) {
++    return;
++  }
++  apply_pending_ = true;
++  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE, base::BindOnce(&SmartSidebarCollapse::Apply,
++                                weak_factory_.GetWeakPtr()));
++}
++
++void SmartSidebarCollapse::Apply() {
++  apply_pending_ = false;
++  const bool force = force_pending_;
++  force_pending_ = false;
++  if (!browser_view_ || !IsEnabled()) {
++    return;
++  }
++
++  auto* controller =
++      tabs::VerticalTabStripStateController::From(browser_view_->browser());
++  if (!controller) {
++    return;
++  }
++  // Switching to the vertical layout applies the rule too.
++  if (!mode_subscription_) {
++    mode_subscription_ = controller->RegisterOnModeChanged(base::BindRepeating(
++        [](SmartSidebarCollapse* self,
++           tabs::VerticalTabStripStateController*) {
++          self->ScheduleApply(/*force=*/true);
++        },
++        base::Unretained(this)));
++  }
++  if (!controller->ShouldDisplayVerticalTabs()) {
++    return;
++  }
++
++  views::Widget* widget = browser_view_->GetWidget();
++  if (!widget || widget->IsMinimized() ||
++      browser_view_->IsFullscreen()) {
++    return;
++  }
++
++  const int window_width = browser_view_->width();
++  if (window_width <= 0) {
++    return;
++  }
++  if (!force && last_width_ == window_width) {
++    return;
++  }
++  const display::Display display =
++      display::Screen::Get()->GetDisplayNearestView(widget->GetNativeView());
++  const int screen_width = display.bounds().width();
++  if (screen_width <= 0) {
++    return;
++  }
++  last_width_ = window_width;
++
++  const bool collapse = ShouldCollapse(window_width, screen_width);
++  // Collapsed, or on the way there.
++  const bool collapsed = controller->GetCollapseState() !=
++                         tabs::VerticalTabStripCollapseState::kExpanded;
++  VLOG(1) << "Smart sidebar: window " << window_width << " of screen "
++          << screen_width << ", collapse=" << collapse
++          << " collapsed=" << collapsed;
++  if (collapse != collapsed) {
++    controller->RequestCollapse(collapse);
++  }
++}
++
++}  // namespace helium
+--- /dev/null
++++ b/chrome/browser/ui/views/helium/helium_smart_sidebar_collapse.h
+@@ -0,0 +1,64 @@
++// Copyright 2026 The Helide Authors
++// Use of this source code is governed by the GPL-3.0 license in LICENSE.
++
++#ifndef CHROME_BROWSER_UI_VIEWS_HELIUM_HELIUM_SMART_SIDEBAR_COLLAPSE_H_
++#define CHROME_BROWSER_UI_VIEWS_HELIUM_HELIUM_SMART_SIDEBAR_COLLAPSE_H_
++
++#include <optional>
++
++#include "base/callback_list.h"
++#include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
++#include "base/scoped_observation.h"
++#include "components/prefs/pref_change_registrar.h"
++#include "ui/views/view.h"
++#include "ui/views/view_observer.h"
++
++class BrowserView;
++
++namespace helium {
++
++// Smart sidebar collapse, for the vertical tab layout. The width of the
++// window alone decides: narrower than 65% of the screen, the tab strip
++// collapses; wider, it expands. This is applied when the window opens and
++// whenever its width changes, so a collapse or expand by hand (or Synergy
++// mode expanding the strip for the address bar) holds until the next resize.
++class SmartSidebarCollapse final : public views::ViewObserver {
++ public:
++  explicit SmartSidebarCollapse(BrowserView* browser_view);
++  SmartSidebarCollapse(const SmartSidebarCollapse&) = delete;
++  SmartSidebarCollapse& operator=(const SmartSidebarCollapse&) = delete;
++  ~SmartSidebarCollapse() override;
++
++  // Whether a window `window_width` wide should have a collapsed strip on a
++  // screen `screen_width` wide.
++  static bool ShouldCollapse(int window_width, int screen_width);
++
++  // views::ViewObserver:
++  void OnViewBoundsChanged(views::View* observed_view) override;
++  void OnViewIsDeleting(views::View* observed_view) override;
++
++ private:
++  bool IsEnabled() const;
++  // Applies the width rule on the next turn of the message loop, outside of
++  // layout. `force` applies it even if the width has not changed.
++  void ScheduleApply(bool force);
++  void Apply();
++
++  raw_ptr<BrowserView> browser_view_;
++  base::ScopedObservation<views::View, views::ViewObserver>
++      browser_view_observation_{this};
++  PrefChangeRegistrar pref_change_registrar_;
++  base::CallbackListSubscription mode_subscription_;
++
++  // The width last applied, so moves and height changes do nothing.
++  std::optional<int> last_width_;
++  bool apply_pending_ = false;
++  bool force_pending_ = false;
++
++  base::WeakPtrFactory<SmartSidebarCollapse> weak_factory_{this};
++};
++
++}  // namespace helium
++
++#endif  // CHROME_BROWSER_UI_VIEWS_HELIUM_HELIUM_SMART_SIDEBAR_COLLAPSE_H_
+--- /dev/null
++++ b/chrome/common/helium_smart_sidebar_prefs.h
+@@ -0,0 +1,20 @@
++// Copyright 2026 The Helide Authors
++// Use of this source code is governed by the GPL-3.0 license in LICENSE.
++
++#ifndef CHROME_COMMON_HELIUM_SMART_SIDEBAR_PREFS_H_
++#define CHROME_COMMON_HELIUM_SMART_SIDEBAR_PREFS_H_
++
++namespace helium {
++
++// Linux only. A boolean pref, on by default. With the vertical tab layout,
++// the tab strip collapses while the window is narrower than
++// kSmartSidebarCollapseScreenFraction of the screen's width, and expands
++// while it is wider.
++inline constexpr char kSmartSidebarCollapse[] =
++    "helium.browser.smart_sidebar_collapse";
++
++inline constexpr double kSmartSidebarCollapseScreenFraction = 0.65;
++
++}  // namespace helium
++
++#endif  // CHROME_COMMON_HELIUM_SMART_SIDEBAR_PREFS_H_

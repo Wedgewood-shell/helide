@@ -13,6 +13,8 @@
  *   dump PATH             write the toplevel's latest frame as a PPM image
  *   size                  print the latest frame size, state and the app-id
  *   activate 0|1          configure the toplevel as inactive or active
+ *   resize W H            configure the toplevel W x H (the output stays
+ *                         WIDTH x HEIGHT)
  *   click X Y             left button press and release at X,Y
  *   popups                print the live subsurfaces (position, size) and the
  *                         xdg popups asked for since the last call (anchor
@@ -310,13 +312,18 @@ static char popup_log[8192];
 static void toplevel_gone(struct wl_resource* r) {
   if (toplevel_resource == r) toplevel_resource = NULL;
 }
+/* The toplevel's size, as the last configure asked for. */
+static int toplevel_w = WIDTH, toplevel_h = HEIGHT;
+static bool toplevel_activated = true;
+
 static void send_toplevel_configure(bool activated) {
+  toplevel_activated = activated;
   struct wl_array states;
   wl_array_init(&states);
   if (activated) {
     *(uint32_t*)wl_array_add(&states, sizeof(uint32_t)) = XDG_TOPLEVEL_STATE_ACTIVATED;
   }
-  xdg_toplevel_send_configure(toplevel_resource, WIDTH, HEIGHT, &states);
+  xdg_toplevel_send_configure(toplevel_resource, toplevel_w, toplevel_h, &states);
   wl_array_release(&states);
   xdg_surface_send_configure(toplevel_xdg_surface, next_serial());
 }
@@ -514,6 +521,15 @@ static void handle_command(char* line) {
     if (sscanf(line, "%*s %lf", &a) != 1 || !toplevel_resource) return reply("error activate");
     send_toplevel_configure(a != 0);
     return reply("ok activate %d", a != 0);
+  }
+  if (!strcmp(cmd, "resize")) {
+    if (sscanf(line, "%*s %lf %lf", &a, &b) != 2 || a < 1 || b < 1 || !toplevel_resource) {
+      return reply("error resize");
+    }
+    toplevel_w = (int)a;
+    toplevel_h = (int)b;
+    send_toplevel_configure(toplevel_activated);
+    return reply("ok resize %dx%d", toplevel_w, toplevel_h);
   }
   if (!strcmp(cmd, "click")) {
     if (sscanf(line, "%*s %lf %lf", &a, &b) != 2 || !pointer_resource || !toplevel_surface) {

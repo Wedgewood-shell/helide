@@ -51,6 +51,7 @@ def main():
             "helium/linux/linux-window-close-toggle.patch",
             "helium/linux/linux-three-finger-tab-scrub.patch",
             "helium/linux/linux-synergy-mode.patch",
+            "helium/linux/linux-smart-sidebar-collapse.patch",
         ],
     )
     selected = parser.parse_args().patch

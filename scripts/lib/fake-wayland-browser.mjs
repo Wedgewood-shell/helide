@@ -125,14 +125,15 @@ export async function connectCdp(port) {
 
 // ---- the browser -----------------------------------------------------------
 // `browserPrefs` go under helium.browser in the new profile's Preferences; the
-// vertical tab layout is the default.
+// vertical tab layout is the default. Smart sidebar collapse is off unless a
+// test turns it on, so the strip keeps the collapsed state a test asks for.
 // `prefs` are other top-level entries.
 export async function launchBrowser(runtimeDir, socket, { browserPrefs = {}, prefs = {}, vmodule = '' } = {}) {
   const profile = mkdtempSync(join(tmpdir(), 'helide-test-profile-'));
   mkdirSync(join(profile, 'Default'));
   writeFileSync(join(profile, 'Default/Preferences'), JSON.stringify({
     ...prefs,
-    helium: { browser: { layout: 2, ...browserPrefs } },
+    helium: { browser: { layout: 2, smart_sidebar_collapse: false, ...browserPrefs } },
   }));
   const child = spawn(browserPath, [
     '--ozone-platform=wayland', '--disable-gpu', `--user-data-dir=${profile}`,
