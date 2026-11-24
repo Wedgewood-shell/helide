@@ -8,7 +8,7 @@
 //
 //   node scripts/test-three-finger-tab-scrub.mjs
 //
-// Needs a built tree (build/src/out/Default/helium), libwayland-server and
+// Needs a built tree (build/src/out/Default/helide), libwayland-server and
 // wayland-scanner. HELIDE_TEST_EXECUTABLE overrides the browser.
 import assert from 'node:assert/strict';
 import { setTimeout as sleep } from 'node:timers/promises';

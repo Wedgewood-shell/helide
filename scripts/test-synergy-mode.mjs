@@ -10,7 +10,7 @@
 //
 //   node scripts/test-synergy-mode.mjs
 //
-// Needs a built tree (build/src/out/Default/helium), libwayland-server and
+// Needs a built tree (build/src/out/Default/helide), libwayland-server and
 // wayland-scanner. HELIDE_TEST_EXECUTABLE overrides the browser.
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
@@ -135,28 +135,28 @@ await session({ synergy_mode: true }, async ({ compositor, cdp, browser }) => {
   });
 
   await test('turning it off and on again moves the toolbar back and forth', async () => {
-    await setPref(cdp, 'helium.browser.synergy_mode', false);
+    await setPref(cdp, 'helide.browser.synergy_mode', false);
     let frame = await compositor.frame(`${frames}-off-again.ppm`);
     assert.ok(ink(frame, TOOLBAR_ROW) > 40, 'the toolbar row is back');
-    await setPref(cdp, 'helium.browser.synergy_mode', true);
+    await setPref(cdp, 'helide.browser.synergy_mode', true);
     frame = await compositor.frame(`${frames}-on-again.ppm`);
     assert.ok(ink(frame, TOOLBAR_ROW) < 40, 'and gone again');
     assert.ok(addressBarShown(frame), 'the address bar is in the strip again');
   });
 
   await test('switching to another layout and back keeps working', async () => {
-    await setPref(cdp, 'helium.browser.layout', 0);
+    await setPref(cdp, 'helide.browser.layout', 0);
     let frame = await compositor.frame(`${frames}-classic.ppm`);
     assert.ok(ink(frame, TOOLBAR_ROW) > 40, 'the classic layout has its toolbar');
-    await setPref(cdp, 'helium.browser.layout', 2);
+    await setPref(cdp, 'helide.browser.layout', 2);
     frame = await compositor.frame(`${frames}-vertical.ppm`);
     assert.ok(ink(frame, TOOLBAR_ROW) < 40, 'Synergy mode is back with vertical tabs');
     assert.ok(addressBarShown(frame), 'with the address bar in the strip');
   });
 
   await test('Zen mode turns it off', async () => {
-    await setPref(cdp, 'helium.browser.zen_mode', true);
-    await setPref(cdp, 'helium.browser.zen_mode', false);
+    await setPref(cdp, 'helide.browser.zen_mode', true);
+    await setPref(cdp, 'helide.browser.zen_mode', false);
     const frame = await compositor.frame(`${frames}-after-zen.ppm`);
     assert.ok(addressBarShown(frame), 'Synergy mode is back after Zen mode');
   });
@@ -369,28 +369,28 @@ await session({ synergy_mode: true }, async ({ compositor, cdp, browser }) => {
   });
 
   await test('turning it off and on again moves the toolbar back and forth', async () => {
-    await setPref(cdp, 'helium.browser.synergy_mode', false);
+    await setPref(cdp, 'helide.browser.synergy_mode', false);
     let frame = await compositor.frame(`${frames}-off-again.ppm`);
     assert.ok(ink(frame, TOOLBAR_ROW) > 40, 'the toolbar row is back');
-    await setPref(cdp, 'helium.browser.synergy_mode', true);
+    await setPref(cdp, 'helide.browser.synergy_mode', true);
     frame = await compositor.frame(`${frames}-on-again.ppm`);
     assert.ok(ink(frame, TOOLBAR_ROW) < 40, 'and gone again');
     assert.ok(addressBarShown(frame), 'the address bar is in the strip again');
   });
 
   await test('switching to another layout and back keeps working', async () => {
-    await setPref(cdp, 'helium.browser.layout', 0);
+    await setPref(cdp, 'helide.browser.layout', 0);
     let frame = await compositor.frame(`${frames}-classic.ppm`);
     assert.ok(ink(frame, TOOLBAR_ROW) > 40, 'the classic layout has its toolbar');
-    await setPref(cdp, 'helium.browser.layout', 2);
+    await setPref(cdp, 'helide.browser.layout', 2);
     frame = await compositor.frame(`${frames}-vertical.ppm`);
     assert.ok(ink(frame, TOOLBAR_ROW) < 40, 'Synergy mode is back with vertical tabs');
     assert.ok(addressBarShown(frame), 'with the address bar in the strip');
   });
 
   await test('Zen mode turns it off', async () => {
-    await setPref(cdp, 'helium.browser.zen_mode', true);
-    await setPref(cdp, 'helium.browser.zen_mode', false);
+    await setPref(cdp, 'helide.browser.zen_mode', true);
+    await setPref(cdp, 'helide.browser.zen_mode', false);
     const frame = await compositor.frame(`${frames}-after-zen.ppm`);
     assert.ok(addressBarShown(frame), 'Synergy mode is back after Zen mode');
   });

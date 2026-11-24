@@ -1,9 +1,9 @@
 (() => {
   "use strict";
-  if (globalThis.__heliumGlass) return;
-  globalThis.__heliumGlass = true;
-  const S = HeliumGlassSettings, P = HeliumGlassPalette, C = HeliumGlassCache;
-  const ATTRIBUTE = "data-helium-glass-surface";
+  if (globalThis.__helideGlass) return;
+  globalThis.__helideGlass = true;
+  const S = HelideGlassSettings, P = HelideGlassPalette, C = HelideGlassCache;
+  const ATTRIBUTE = "data-helide-glass-surface";
   const prefix = "hg" + Math.random().toString(36).slice(2, 12);
   const exempt = "head,script,style,link,meta,noscript,template,a,[role=link],[contenteditable=true],svg,canvas,video,audio,picture,img,iframe,object,embed,input,textarea,select,option,button,[role=button],[role=img],[role=slider],[role=checkbox],[role=switch],[role=alert]";
   const styled = new Set(), originalMarkers = new WeakMap(), groups = new Map(), colors = new Map();
@@ -119,7 +119,7 @@
     const css = enabled() ? [...groups].filter(([, id]) => active.has(id)).map(([declarations, id]) => `[${ATTRIBUTE}="${id}"]{${declarations}}`).join("\n") : "";
     cssChain = cssChain.then(async () => {
       if (css === appliedCss) return;
-      const response = await chrome.runtime.sendMessage({ type: "HELIUM_GLASS_CSS", css, previousCss: appliedCss });
+      const response = await chrome.runtime.sendMessage({ type: "HELIDE_GLASS_CSS", css, previousCss: appliedCss });
       if (!response?.ok) throw new Error(response?.error || "Could not apply styles");
       appliedCss = css; error = null;
       if (css && startup.firstStyleAt === null) startup.firstStyleAt = performance.now();
@@ -134,7 +134,7 @@
     if (!bootstrapCss) return;
     const previousCss = bootstrapCss; bootstrapCss = "";
     cssChain = cssChain.then(async () => {
-      const response = await chrome.runtime.sendMessage({ type: "HELIUM_GLASS_CSS", css: "", previousCss });
+      const response = await chrome.runtime.sendMessage({ type: "HELIDE_GLASS_CSS", css: "", previousCss });
       if (!response?.ok) throw new Error(response?.error || "Could not remove cached styles");
     }).catch(reason => { error = reason.message; });
   }
@@ -145,7 +145,7 @@
       const entry = { version: C.VERSION, time: Date.now(), mediaDark: matchMedia("(prefers-color-scheme: dark)").matches,
         html: C.attributes(document.documentElement), body: C.attributes(document.body),
         surfaces: [...canvases.values()].filter(surface => document.querySelector(surface.selector)) };
-      chrome.runtime.sendMessage({ type: "HELIUM_GLASS_CACHE", entry }).catch(reason => { error = reason.message; });
+      chrome.runtime.sendMessage({ type: "HELIDE_GLASS_CACHE", entry }).catch(reason => { error = reason.message; });
     }, 500);
   }
   function critical() {
@@ -237,8 +237,8 @@
     clear(); if (enabled()) { critical(); schedule(document.documentElement, true); }
   });
   chrome.runtime.onMessage.addListener((message, _sender, respond) => {
-    if (message?.type === "HELIUM_GLASS_STATUS") respond({ enabled: enabled(), mode: theme.mode, tint: P.css(theme.base), surfaces: styled.size, error, startup });
-    else if (message?.type === "HELIUM_GLASS_RESCAN") { schedule(); respond({ ok: true }); }
+    if (message?.type === "HELIDE_GLASS_STATUS") respond({ enabled: enabled(), mode: theme.mode, tint: P.css(theme.base), surfaces: styled.size, error, startup });
+    else if (message?.type === "HELIDE_GLASS_RESCAN") { schedule(); respond({ ok: true }); }
   });
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => schedule());
   document.addEventListener("visibilitychange", () => { if (!document.hidden) schedule(); });
@@ -248,7 +248,7 @@
   document.addEventListener("load", event => {
     if (event.target.matches?.("link[rel=stylesheet]")) { queueCritical(); schedule(); }
   }, true);
-  chrome.runtime.sendMessage({ type: "HELIUM_GLASS_CONTEXT", mediaDark: matchMedia("(prefers-color-scheme: dark)").matches }).then(context => {
+  chrome.runtime.sendMessage({ type: "HELIDE_GLASS_CONTEXT", mediaDark: matchMedia("(prefers-color-scheme: dark)").matches }).then(context => {
     if (!context?.ok) throw new Error(context?.error || "Could not initialize styles");
     if (!settingsRevision) settings = S.normalize(context.settings);
     site = context?.site || site; // A site's toggle also covers its embedded frames.

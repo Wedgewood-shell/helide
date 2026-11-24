@@ -1,0 +1,291 @@
+--- a/chrome/browser/profiles/profile_io_data.cc
++++ b/chrome/browser/profiles/profile_io_data.cc
+@@ -45,6 +45,7 @@
+ #endif
+       content::kChromeUIScheme,
+       content::kHeliumUIScheme,
++      content::kHeliumLegacyUIScheme,
+       content::kChromeUIUntrustedScheme,
+       url::kDataScheme,
+ #if BUILDFLAG(IS_CHROMEOS)
+--- a/chrome/browser/ui/navigator/browser_navigator.cc
++++ b/chrome/browser/ui/navigator/browser_navigator.cc
+@@ -727,7 +727,8 @@
+   }
+ #endif  // BUILDFLAG(IS_CHROMEOS)
+ 
+-  if (params->url.scheme() == content::kHeliumUIScheme) {
++  if (params->url.scheme() == content::kHeliumUIScheme ||
++      params->url.scheme() == content::kHeliumLegacyUIScheme) {
+     GURL::Replacements replacements;
+     replacements.SetSchemeStr(content::kChromeUIScheme);
+     params->url = params->url.ReplaceComponents(replacements);
+--- a/chrome/common/chrome_paths_linux.cc
++++ b/chrome/common/chrome_paths_linux.cc
+@@ -7,12 +7,28 @@
+ #include <memory>
+ #include <optional>
+ 
++#include <errno.h>
++#include <signal.h>
++#include <stdio.h>
++#include <unistd.h>
++
++#include <string_view>
++
+ #include "base/base_paths.h"
++#include "base/command_line.h"
+ #include "base/environment.h"
++#include "base/files/file_enumerator.h"
+ #include "base/files/file_path.h"
++#include "base/files/file_util.h"
++#include "base/files/important_file_writer.h"
++#include "base/json/json_reader.h"
++#include "base/json/json_writer.h"
++#include "base/logging.h"
+ #include "base/nix/xdg_util.h"
+ #include "base/path_service.h"
++#include "base/strings/string_number_conversions.h"
+ #include "base/strings/string_util.h"
++#include "base/values.h"
+ #include "build/branding_buildflags.h"
+ #include "build/build_config.h"
+ #include "chrome/common/channel_info.h"
+@@ -56,6 +72,127 @@
+   *result = home.Append(fallback_name);
+   return true;
+ #endif
++}
++
++// Helide: Helium kept its profile in net.imput.helium, with pref keys under
++// "helium" and about:flags entries named helium-*. Helide renamed all three.
++constexpr char kHeliumDataDirBasename[] = "net.imput.helium";
++constexpr char kHeliumPrefsKey[] = "helium";
++constexpr char kHelidePrefsKey[] = "helide";
++constexpr std::string_view kHeliumFlagPrefix = "helium-";
++constexpr std::string_view kHelideFlagPrefix = "helide-";
++
++// Whether a browser still runs on `dir`: its SingletonLock points at
++// "<host>-<pid>".
++bool IsProfileDirInUse(const base::FilePath& dir) {
++  base::FilePath target;
++  if (!base::ReadSymbolicLink(dir.Append("SingletonLock"), &target)) {
++    return false;
++  }
++  const std::string& lock = target.value();
++  const size_t dash = lock.rfind('-');
++  int pid = 0;
++  if (dash == std::string::npos ||
++      !base::StringToInt(std::string_view(lock).substr(dash + 1), &pid) ||
++      pid <= 0) {
++    return false;
++  }
++  return kill(pid, 0) == 0 || errno == EPERM;
++}
++
++// Moves the "helium" pref dictionary to "helide" in one JSON prefs file, and
++// renames helium-* about:flags entries in Local State.
++void RenamePrefsInFile(const base::FilePath& path) {
++  std::string json;
++  if (!base::ReadFileToString(path, &json)) {
++    return;
++  }
++  std::optional<base::Value> root = base::JSONReader::Read(
++      json, base::JSON_PARSE_CHROMIUM_EXTENSIONS);
++  if (!root || !root->is_dict()) {
++    LOG(WARNING) << "Helide: could not read " << path;
++    return;
++  }
++  base::DictValue& dict = root->GetDict();
++  bool changed = false;
++  if (std::optional<base::Value> old_prefs = dict.Extract(kHeliumPrefsKey)) {
++    if (old_prefs->is_dict()) {
++      base::DictValue merged = std::move(old_prefs->GetDict());
++      // Anything already under the new key wins.
++      if (const base::DictValue* existing = dict.FindDict(kHelidePrefsKey)) {
++        merged.Merge(existing->Clone());
++      }
++      dict.Set(kHelidePrefsKey, std::move(merged));
++    }
++    changed = true;
++  }
++  if (base::ListValue* flags =
++          dict.FindListByDottedPath("browser.enabled_labs_experiments")) {
++    for (base::Value& flag : *flags) {
++      if (flag.is_string() && flag.GetString().starts_with(kHeliumFlagPrefix)) {
++        flag = base::Value(std::string(kHelideFlagPrefix) +
++                           flag.GetString().substr(kHeliumFlagPrefix.size()));
++        changed = true;
++      }
++    }
++  }
++  if (!changed) {
++    return;
++  }
++  std::optional<std::string> output = base::WriteJson(*root);
++  if (!output || !base::ImportantFileWriter::WriteFileAtomically(path, *output)) {
++    LOG(WARNING) << "Helide: could not rewrite " << path;
++  }
++}
++
++// Moves a Helium profile directory to Helide's, once, and leaves a symlink
++// behind so tools that still look in the old place find it. Returns false if
++// the old directory must stay in use for now (an old browser runs on it).
++bool MigrateHeliumUserDataDir(const base::FilePath& old_dir,
++                              const base::FilePath& new_dir) {
++  if (base::PathExists(new_dir) || base::IsLink(old_dir) ||
++      !base::DirectoryExists(old_dir)) {
++    return true;
++  }
++  if (IsProfileDirInUse(old_dir)) {
++    LOG(WARNING) << "Helide: " << old_dir
++                 << " is in use by another browser; not moving it yet";
++    return false;
++  }
++  if (rename(old_dir.value().c_str(), new_dir.value().c_str()) != 0) {
++    PLOG(WARNING) << "Helide: could not move " << old_dir << " to " << new_dir;
++    return false;
++  }
++  if (!base::CreateSymbolicLink(new_dir.BaseName(), old_dir)) {
++    PLOG(WARNING) << "Helide: could not link " << old_dir;
++  }
++
++  RenamePrefsInFile(new_dir.Append("Local State"));
++  base::FileEnumerator profiles(new_dir, /*recursive=*/false,
++                                base::FileEnumerator::DIRECTORIES);
++  for (base::FilePath profile = profiles.Next(); !profile.empty();
++       profile = profiles.Next()) {
++    RenamePrefsInFile(profile.Append("Preferences"));
++    RenamePrefsInFile(profile.Append("Secure Preferences"));
++  }
++  LOG(WARNING) << "Helide: moved the profile from " << old_dir << " to "
++               << new_dir;
++  return true;
++}
++
++// The cache follows the profile directory's name.
++void MigrateHeliumCacheDir(base::Environment* env,
++                           const std::string& old_basename,
++                           const std::string& new_basename) {
++  const base::FilePath cache_home =
++      base::nix::GetXDGDirectory(env, "XDG_CACHE_HOME", ".cache");
++  const base::FilePath old_cache = cache_home.Append(old_basename);
++  const base::FilePath new_cache = cache_home.Append(new_basename);
++  if (base::DirectoryExists(old_cache) && !base::IsLink(old_cache) &&
++      !base::PathExists(new_cache) &&
++      rename(old_cache.value().c_str(), new_cache.value().c_str()) == 0) {
++    base::CreateSymbolicLink(new_cache.BaseName(), old_cache);
++  }
+ }
+ 
+ }  // namespace
+@@ -81,7 +218,10 @@
+   std::unique_ptr<base::Environment> env(base::Environment::Create());
+   base::FilePath config_dir;
+   std::optional<std::string> chrome_config_home_str =
+-      env->GetVar("HELIUM_CONFIG_HOME");
++      env->GetVar("HELIDE_CONFIG_HOME");
++  if (!chrome_config_home_str.has_value()) {
++    chrome_config_home_str = env->GetVar("HELIUM_CONFIG_HOME");
++  }
+   if (chrome_config_home_str.has_value() &&
+       base::IsStringUTF8(chrome_config_home_str.value())) {
+     config_dir = base::FilePath::FromUTF8Unsafe(chrome_config_home_str.value());
+@@ -92,6 +232,28 @@
+ 
+   std::string data_dir_basename = "net.imput.helium";
+   *result = config_dir.Append(data_dir_basename + GetChannelSuffixForDataDir());
++
++  // Only the browser process moves things, and only once.
++  static bool migrated = false;
++  static bool use_old_dir = false;
++  if (!migrated &&
++      !base::CommandLine::ForCurrentProcess()->HasSwitch("type")) {
++    migrated = true;
++    const std::string old_basename =
++        kHeliumDataDirBasename + GetChannelSuffixForDataDir();
++    if (old_basename != result->BaseName().value()) {
++      use_old_dir =
++          !MigrateHeliumUserDataDir(config_dir.Append(old_basename), *result);
++      if (!use_old_dir) {
++        MigrateHeliumCacheDir(env.get(), old_basename,
++                              result->BaseName().value());
++      }
++    }
++  }
++  if (use_old_dir) {
++    *result = config_dir.Append(kHeliumDataDirBasename +
++                                GetChannelSuffixForDataDir());
++  }
+   return true;
+ }
+ 
+--- a/components/url_formatter/url_fixer.cc
++++ b/components/url_formatter/url_fixer.cc
+@@ -40,6 +40,8 @@
+ // Hardcode these constants to avoid dependences on //chrome and //content.
+ const char kChromeUIScheme[] = "chrome";
+ const char kHeliumUIScheme[] = "helium";
++// Helide: Helium's scheme, typed as before the rename, becomes the current one.
++const char kHeliumLegacyUIScheme[] = "helium";
+ const char kDevToolsScheme[] = "devtools";
+ const char kChromeUIDefaultHost[] = "version";
+ const char kViewSourceScheme[] = "view-source";
+@@ -448,7 +450,7 @@
+       if (GetValidScheme(*text, &parts->scheme, &scheme) &&
+           (url::IsStandard(scheme) || scheme == url::kAboutScheme ||
+            scheme == kChromeUIScheme || scheme == kHeliumUIScheme ||
+-           scheme == url::kFileScheme)) {
++           scheme == kHeliumLegacyUIScheme || scheme == url::kFileScheme)) {
+         found_scheme = true;
+       } else {
+         (*text)[semicolon] = ';';
+@@ -464,7 +466,8 @@
+   // Proceed with about, chrome, and devtools schemes,
+   // but not file or nonstandard schemes.
+   if ((scheme != url::kAboutScheme) && (scheme != kChromeUIScheme) &&
+-      (scheme != kHeliumUIScheme) && (scheme != kDevToolsScheme) &&
++      (scheme != kHeliumUIScheme) && (scheme != kHeliumLegacyUIScheme) &&
++      (scheme != kDevToolsScheme) &&
+       !url::IsStandard(scheme)) {
+     return scheme;
+   }
+@@ -624,11 +627,14 @@
+   bool chrome_url =
+       (scheme == url::kAboutScheme)
+       || (scheme == kChromeUIScheme)
+-      || (scheme == kHeliumUIScheme);
++      || (scheme == kHeliumUIScheme)
++      || (scheme == kHeliumLegacyUIScheme);
+   bool devtools_url = (scheme == kDevToolsScheme);
+   if (chrome_url || devtools_url || url::IsStandard(scheme)) {
+     // Replace the about: scheme with the chrome: scheme.
+-    std::string url(scheme == url::kAboutScheme ? kChromeUIScheme : scheme);
++    std::string url(scheme == url::kAboutScheme ? kChromeUIScheme
++                    : scheme == kHeliumLegacyUIScheme ? kHeliumUIScheme
++                                                      : scheme);
+     url.append(url::kStandardSchemeSeparator);
+ 
+     // We need to check whether the |username| is valid because it is our
+--- a/content/common/url_schemes.cc
++++ b/content/common/url_schemes.cc
+@@ -62,6 +62,7 @@
+   url::AddStandardScheme(kChromeDevToolsScheme, url::SCHEME_WITH_HOST);
+   url::AddStandardScheme(kChromeUIScheme, url::SCHEME_WITH_HOST);
+   url::AddStandardScheme(kHeliumUIScheme, url::SCHEME_WITH_HOST);
++  url::AddStandardScheme(kHeliumLegacyUIScheme, url::SCHEME_WITH_HOST);
+   url::AddStandardScheme(kChromeUIUntrustedScheme, url::SCHEME_WITH_HOST);
+   url::AddStandardScheme(kChromeErrorScheme, url::SCHEME_WITH_HOST);
+   for (auto& scheme : schemes.standard_schemes)
+--- a/content/public/common/url_constants.h
++++ b/content/public/common/url_constants.h
+@@ -20,6 +20,9 @@
+ inline constexpr char kChromeErrorScheme[] = "chrome-error";
+ inline constexpr char kChromeUIScheme[] = "chrome";  // Used for WebUIs.
+ inline constexpr char kHeliumUIScheme[] = "helium";  // also used for webuis :3
++// Helide: links with Helium's scheme, from before the rename (bookmarks,
++// history, other programs), still open the same pages.
++inline constexpr char kHeliumLegacyUIScheme[] = "helium";
+ inline constexpr char kChromeNativeScheme[] = "chrome-native";
+ inline constexpr char kChromeUIUntrustedScheme[] = "chrome-untrusted";
+ inline constexpr char kViewSourceScheme[] = "view-source";

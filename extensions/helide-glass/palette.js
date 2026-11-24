@@ -69,6 +69,6 @@
     }, colors: stops.map(stop => stop.color) };
   }
   const api = { luminance, contrast, saturation, distance, inferTheme, surface, css, gradient };
-  globalThis.HeliumGlassPalette = api;
+  globalThis.HelideGlassPalette = api;
   if (typeof module !== "undefined") module.exports = api;
 })();

@@ -5,9 +5,9 @@ _current_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 _root_dir="$(cd "$_current_dir/.." && pwd)"
 _build_dir="$_root_dir/build"
 _release_dir="$_build_dir/release"
-_app_dir="$_release_dir/Helium.AppDir"
+_app_dir="$_release_dir/Helide.AppDir"
 
-_app_name="helium"
+_app_name="helide"
 _version=$(python3 "$_root_dir/helium-chromium/utils/helium_version.py" \
                    --tree "$_root_dir/helium-chromium" \
                    --platform-tree "$_root_dir" \
@@ -28,10 +28,10 @@ _update_info="gh-releases-zsync|imputnet|helium-linux|latest|$_app_name-*-$_arch
 _tarball_name="${_release_name}_linux"
 _tarball_dir="$_release_dir/$_tarball_name"
 
-_files="helium
+_files="helide
 chrome_100_percent.pak
 chrome_200_percent.pak
-helium_crashpad_handler
+helide_crashpad_handler
 chromedriver
 icudtl.dat
 libEGL.so
@@ -59,12 +59,12 @@ done
 mkdir -p "$_tarball_dir/locales"
 cp "$_build_dir/src/out/Default/locales/"*.pak "$_tarball_dir/locales/"
 
-cp "$_root_dir/package/helium.desktop" "$_tarball_dir"
+cp "$_root_dir/package/helide.desktop" "$_tarball_dir"
 cp "$_root_dir/package/apparmor.cfg" "$_tarball_dir"
-cp "$_root_dir/package/helium-wrapper.sh" "$_tarball_dir/helium-wrapper"
+cp "$_root_dir/package/helide-wrapper.sh" "$_tarball_dir/helide-wrapper"
 
 wait
-(cd "$_tarball_dir" && ln -sf helium chrome)
+(cd "$_tarball_dir" && ln -sf helide chrome)
 
 _syms_zip="$_release_dir/${_release_name}_symbols.zip"
 rm -f "$_syms_zip"
@@ -94,17 +94,17 @@ tar vcf - "$_tarball_name" \
 
 # create AppImage
 rm -rf "$_app_dir"
-mkdir -p "$_app_dir/opt/helium/" "$_app_dir/usr/share/icons/hicolor/256x256/apps/"
-cp -r "$_tarball_dir"/* "$_app_dir/opt/helium/"
-cp "$_root_dir/package/helium.desktop" "$_app_dir"
+mkdir -p "$_app_dir/opt/helide/" "$_app_dir/usr/share/icons/hicolor/256x256/apps/"
+cp -r "$_tarball_dir"/* "$_app_dir/opt/helide/"
+cp "$_root_dir/package/helide.desktop" "$_app_dir"
 
-cp "$_root_dir/package/helium-wrapper-appimage.sh" "$_app_dir/AppRun"
+cp "$_root_dir/package/helide-wrapper-appimage.sh" "$_app_dir/AppRun"
 
-for out in "$_app_dir/helium.png" "${_app_dir}/usr/share/icons/hicolor/256x256/apps/helium.png"; do
-    cp "${_app_dir}/opt/helium/product_logo_256.png" "$out"
+for out in "$_app_dir/helide.png" "${_app_dir}/usr/share/icons/hicolor/256x256/apps/helide.png"; do
+    cp "${_app_dir}/opt/helide/product_logo_256.png" "$out"
 done
 
-export APPIMAGETOOL_APP_NAME="Helium"
+export APPIMAGETOOL_APP_NAME="Helide"
 export VERSION="$_version"
 
 # check whether CI GPG secrets are available

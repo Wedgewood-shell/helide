@@ -1,9 +1,8 @@
 # Helide packaging guidelines
 
 Helide is a personal Helium fork for Linux on the Motobook 60 Pro. These
-packaging notes are adapted from upstream Helium. Visible desktop/AppStream
-names and the icon identify Helide, but executable, package, profile and desktop
-IDs retain their existing `helium` names for compatibility. This is not an
+packaging notes are adapted from upstream Helium. The executable, package,
+profile directory, desktop file and icon are all named `helide`. This is not an
 official Helium release.
 
 This document provides guidelines for packagers creating Helide packages
@@ -16,24 +15,24 @@ respecting distribution-specific conventions.
   upstream. Note that on FHS-compliant distributions, Chromium-based
   browsers are typically installed into /opt or /usr/lib64.
 - The primary executable should be a symbolic link to
-  $prefix/helium-wrapper. On FHS-compliant distributions, it should
+  $prefix/helide-wrapper. On FHS-compliant distributions, it should
   be installed into `/usr/bin` or `/usr/local/bin`.
 
 ## Branding
-- The primary executable name should be `helium`.
-- The package name should be `helium` if available; `helium-browser`
+- The primary executable name should be `helide`.
+- The package name should be `helide` if available; `helide-browser`
   is acceptable otherwise. If the packaging system uses reverse-DNS
-  notation as identifiers, the identifier should be `net.imput.helium`
+  notation as identifiers, the identifier should be `net.imput.helide`
   (all lowercase).
 - If built from releases marked as "pre-release", the package name
   should have a `-prerelease` (preferred), `-pre` or `-beta` suffix.
 - If built from GitHub-hosted binaries, the package name should have a
   `-bin` suffix.
-- If installing the desktop file, it should be named `helium.desktop`
-   (or `net.imput.helium.desktop` on systems preferring reverse-DNS
+- If installing the desktop file, it should be named `helide.desktop`
+   (or `net.imput.helide.desktop` on systems preferring reverse-DNS
     naming).
-- If installing icons, the icon name should be `helium`
-  (or `net.imput.helium`).
+- If installing icons, the icon name should be `helide`
+  (or `net.imput.helide`).
 
 ## Versioning
 - Package versions should match the upstream version number.

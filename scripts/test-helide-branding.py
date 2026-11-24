@@ -47,7 +47,7 @@ class BrandingTest(unittest.TestCase):
             subprocess.run(command, check=True, capture_output=True, text=True)
             self.assertIn('Open Helide', resource.read_text())
             self.assertIn('The Helium Authors', resource.read_text())
-            self.assertIn('helium://settings', resource.read_text())
+            self.assertIn('helide://settings', resource.read_text())
             self.assertEqual(branding.read_text(), 'PRODUCT_FULLNAME=Helium\n')
             translation = ET.fromstring(translated.read_text()).find('translation')
             self.assertEqual(translation.get('id'), new_id)

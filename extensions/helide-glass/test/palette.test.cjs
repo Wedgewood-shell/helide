@@ -41,7 +41,7 @@ test('gradient stops retain color and get explicit alpha', () => {
   assert.equal(gradient.recolor(0.4), 'linear-gradient(rgba(255, 255, 255, 0.4), rgba(24, 26, 31, 0.4))');
 });
 test('site opt-out and global disable take precedence', () => {
-  const S = global.HeliumGlassSettings;
+  const S = global.HelideGlassSettings;
   assert.equal(S.isEnabled(S.normalize({ sites: { 'example.test': false } }), 'example.test'), false);
   assert.equal(S.isEnabled(S.normalize({ enabled: false }), 'other.test'), false);
   assert.equal(S.isEnabled(S.normalize({ transparency: 0 }), 'other.test'), false);

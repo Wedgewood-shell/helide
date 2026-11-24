@@ -109,6 +109,9 @@ helium_resources() {
 helium_branding() {
     # Last overlay: upstream substitutions/resources must not undo fork branding.
     python3 "$_root_dir/scripts/apply-helide-branding.py" --tree "$_src_dir"
+    # Then Helium's runtime identifiers: pref keys, helium://, switches,
+    # executable, profile directory and app-id become Helide's.
+    python3 "$_root_dir/scripts/apply-helide-rename.py" --tree "$_src_dir"
 }
 
 write_gn_args() {

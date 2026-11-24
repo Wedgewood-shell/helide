@@ -1,5 +1,5 @@
 "use strict";
-const S = HeliumGlassSettings;
+const S = HelideGlassSettings;
 const $ = id => document.getElementById(id);
 let settings, tab, site, saveTimer;
 function report(error) { $("error").hidden = false; $("error").textContent = error.message || String(error); }
@@ -10,12 +10,12 @@ async function save() {
 async function status() {
   if (!site) return;
   try {
-    const state = await chrome.tabs.sendMessage(tab.id, { type: "HELIUM_GLASS_STATUS" }, { frameId: 0 });
+    const state = await chrome.tabs.sendMessage(tab.id, { type: "HELIDE_GLASS_STATUS" }, { frameId: 0 });
     $("status").dataset.off = String(!state.enabled);
     $("status").textContent = state.enabled ? `${state.mode === "dark" ? "Dark" : "Light"} palette · ${state.surfaces} surfaces softened` : "Original website styles are active";
     if (state.error) report(state.error);
   } catch {
-    $("status").textContent = "Reload this page to activate Helium Glass";
+    $("status").textContent = "Reload this page to activate Helide Glass";
     $("status").dataset.off = "true";
   }
 }
@@ -42,7 +42,7 @@ async function status() {
     $("transparency").addEventListener("change", () => { clearTimeout(saveTimer); save(); });
     $("protectContrast").addEventListener("change", event => { settings.protectContrast = event.target.checked; save(); });
     $("rescan").addEventListener("click", async () => {
-      try { await chrome.tabs.sendMessage(tab.id, { type: "HELIUM_GLASS_RESCAN" }, { frameId: 0 }); setTimeout(status, 700); }
+      try { await chrome.tabs.sendMessage(tab.id, { type: "HELIDE_GLASS_RESCAN" }, { frameId: 0 }); setTimeout(status, 700); }
       catch (error) { report(error); }
     });
     if (site) { status(); setInterval(status, 1500); }

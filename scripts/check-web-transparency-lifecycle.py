@@ -26,7 +26,7 @@ OUT = ROOT / "build/src/out/Default"
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--binary", type=pathlib.Path, default=OUT / "helium")
+    parser.add_argument("--binary", type=pathlib.Path, default=OUT / "helide")
     parser.add_argument("--driver", type=pathlib.Path, default=OUT / "chromedriver")
     parser.add_argument("--opaque", action="store_true", help="check disabled mode")
     parser.add_argument("--pause", type=float, default=5, help="seconds in other tab")
@@ -64,7 +64,7 @@ def main():
                     "binary": str(args.binary.resolve()),
                     "args": [
                         "--ozone-platform=wayland",
-                        f"--helium-transparent-web-content={0 if args.opaque else 1}",
+                        f"--helide-transparent-web-content={0 if args.opaque else 1}",
                         "--no-first-run", "--no-default-browser-check",
                         "--window-size=1000,800", f"--user-data-dir={tmp}/profile",
                     ],

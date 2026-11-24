@@ -20,12 +20,12 @@ Configure your MCP client (replace the absolute path if necessary):
 ```json
 {
   "mcpServers": {
-    "helium": {
+    "helide": {
       "command": "node",
       "args": ["/home/sortedcord/Projects/helium-translucent-exp/mcp/dist/index.js"],
       "env": {
-        "HELIUM_CDP_URL": "http://127.0.0.1:9222",
-        "HELIUM_MCP_ARTIFACTS": "/home/sortedcord/Downloads/helium-mcp"
+        "HELIDE_CDP_URL": "http://127.0.0.1:9222",
+        "HELIDE_MCP_ARTIFACTS": "/home/sortedcord/Downloads/helide-mcp"
       }
     }
   }
@@ -38,9 +38,9 @@ Helide closed. The endpoint defaults to `http://127.0.0.1:9222` and must be a
 loopback HTTP(S) origin. Downloads default to `./artifacts` relative to the
 server's working directory; configure an absolute directory for predictable use.
 
-The server does not modify MCP client configuration automatically. The Pi
-registration name `helium`, `HELIUM_*` environment variables and existing paths
-are retained for compatibility; the server identifies itself as `helide-mcp`.
+The server does not modify MCP client configuration automatically. It
+identifies itself as `helide-mcp`; the `HELIUM_*` environment variables from
+before the rename still work when the `HELIDE_*` ones are not set.
 
 ## Tools
 
@@ -122,7 +122,7 @@ This type-checks and tests endpoint validation, MCP stdio discovery, schema
 validation and offline errors. Browser integration is opt-in:
 
 ```sh
-HELIUM_TEST_EXECUTABLE="$HOME/Applications/helium/helium" npm test
+HELIDE_TEST_EXECUTABLE="$HOME/Applications/helide/helide" npm test
 ```
 
 The integration test launches **only an isolated headless test browser with a

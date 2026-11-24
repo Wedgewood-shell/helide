@@ -117,7 +117,7 @@ is available on compositors supporting `ext-background-effect-v1`.
 The Linux patch is [`patches/helium/linux/wayland-frame-opacity.patch`](patches/helium/linux/wayland-frame-opacity.patch), registered in `patches/series`.
 
 - Adds an opacity control to **Settings → Appearance**, applied live, plus
-  `helium://flags` and the launch switch `--helium-frame-opacity=VALUE`, which
+  `helide://flags` and the launch switch `--helide-frame-opacity=VALUE`, which
   take precedence. See [Settings](#settings).
 - Reuses Helium's native material hooks to let the browser UI backgrounds
   show through. On Linux, ordinary browser windows paint one theme-colored
@@ -181,6 +181,12 @@ The Linux patch is [`patches/helium/linux/wayland-frame-opacity.patch`](patches/
   [`helium-target-march.patch`](patches/helium/linux/helium-target-march.patch).
   `flags.linux.gn` sets it to `arrowlake`. See [CPU target and
   PGO](#cpu-target-and-pgo).
+- Renames Helium's runtime identifiers to Helide (executable, app-id, profile
+  directory, `helide://`, pref keys, switches) at build time with
+  [`apply-helide-rename.py`](scripts/apply-helide-rename.py), and moves existing
+  profiles in
+  [`linux-helide-rename.patch`](patches/helium/linux/linux-helide-rename.patch).
+  See [Branding and compatibility](#branding-and-compatibility).
 
 The shared Helium [native materials patch](helium-chromium/patches/helium/ui/native-frame-materials.patch) contains the existing UI painting hooks. The Linux patches extend those hooks with Wayland compositing and website transparency.
 
@@ -191,12 +197,44 @@ build/About text identifying this as a personal Linux build for the Motobook
 60 Pro. Upstream Helium and Chromium versions and copyright attribution remain
 visible. The version number currently follows the pinned Helium base.
 
-This is the lightweight rebrand: internal generated product metadata remains
-Helium to avoid a large rebuild. Profile/install paths, the `helium` executable,
-`helium://` URLs, `--helium-*` switches, preference keys, desktop app ID and the
-Pi MCP registration `helium` stay unchanged for compatibility. Do not rename
-these paths to follow the visible brand. Existing profiles need no migration.
-The companion extension keeps its established name, **Helium Glass**.
+Helium's runtime identifiers are renamed too:
+
+| What | Helium | Helide |
+|---|---|---|
+| Executable, crash handler | `helium`, `helium_crashpad_handler` | `helide`, `helide_crashpad_handler` |
+| Desktop file, Wayland app-id, icon | `helium.desktop`, `helium` | `helide.desktop`, `helide` |
+| Profile directory | `~/.config/net.imput.helium` | `~/.config/net.imput.helide` |
+| Internal pages | `helium://settings` | `helide://settings` |
+| Preference keys | `helium.browser.layout` | `helide.browser.layout` |
+| Launch switches and flags | `--helium-frame-opacity` | `--helide-frame-opacity` |
+| Config directory override | `HELIUM_CONFIG_HOME` | `HELIDE_CONFIG_HOME` (the old name still works) |
+| Companion extension | Helium Glass | Helide Glass |
+
+- **Your profile moves by itself.** On the first start, Helide moves
+  `~/.config/net.imput.helium` (and its cache in `~/.cache`) to the new name and
+  leaves a symlink at the old path. It renames the `helium` preference keys to
+  `helide` in Local State and every profile, and the `helium-*` entries you
+  enabled in `helide://flags`. If a Helium build is still running on the old
+  directory, it is left alone and used as it is until the next start.
+- **Old links keep working.** `helium://` URLs in bookmarks, history or other
+  programs open the same pages; typed in the address bar they become `helide://`.
+- **What stays Helium:** C++ names, source paths and GN targets, `base::Feature`
+  names, content setting names, Helium's services and their domains, the private
+  sync protocol, the `Helium Authors` attribution and the upstream version.
+
+This is done at build time, not in the patches:
+[`scripts/apply-helide-rename.py`](scripts/apply-helide-rename.py) runs after
+the patches and the string branding, and rewrites only those identifiers. The
+patches (including Helium's own) stay as upstream wrote them, so Helium updates
+keep applying. [`linux-helide-rename.patch`](patches/helium/linux/linux-helide-rename.patch)
+moves the profile and keeps `helium://` working.
+`scripts/generate-patch-from-build.py` knows about the rename, so patches made
+from `build/src` still apply to the tree before it.
+
+```sh
+python3 scripts/apply-helide-rename.py --check   # what it would change
+python3 scripts/test-helide-rename.py
+```
 
 The [`helide-branding.patch`](patches/helium/linux/helide-branding.patch) handles
 CLI/About build text. [`scripts/apply-helide-branding.py`](scripts/apply-helide-branding.py)
@@ -222,7 +260,7 @@ Settings branding and preserved upstream copyright:
 
 ```sh
 cd mcp
-HELIDE_TEST_EXECUTABLE="$(realpath ../build/src/out/Default/helium)" npm test
+HELIDE_TEST_EXECUTABLE="$(realpath ../build/src/out/Default/helide)" npm test
 ```
 
 ## Build
@@ -232,8 +270,8 @@ Debian build dependencies; Docker must be installed and accessible to your user.
 
 ```sh
 git clone --branch main --recurse-submodules \
-  https://github.com/sortedcord/helium-translucent-wayland.git
-cd helium-translucent-wayland
+  https://github.com/sortedcord/helide.git
+cd helide
 scripts/docker-build.sh -c
 ```
 
@@ -270,6 +308,7 @@ python3 scripts/check-frame-opacity-patch.py --patch helium/linux/linux-window-c
 python3 scripts/check-frame-opacity-patch.py --patch helium/linux/linux-three-finger-tab-scrub.patch
 python3 scripts/check-frame-opacity-patch.py --patch helium/linux/linux-synergy-mode.patch
 python3 scripts/check-frame-opacity-patch.py --patch helium/linux/linux-smart-sidebar-collapse.patch
+python3 scripts/check-frame-opacity-patch.py --patch helium/linux/linux-helide-rename.patch
 ```
 
 To turn edits made in `build/src` into a patch against the pinned upstream
@@ -302,18 +341,18 @@ hidden on X11 and other platforms.
 | **Blur behind the window** | Toggle | Off |
 | **Transparent website backgrounds** | Toggle | Off |
 
-They are per-profile prefs (`helium.browser.wayland_frame_opacity`,
-`helium.browser.wayland_frame_blur`, and
-`helium.browser.wayland_transparent_web_content`). Changing one applies to every
+They are per-profile prefs (`helide.browser.wayland_frame_opacity`,
+`helide.browser.wayland_frame_blur`, and
+`helide.browser.wayland_transparent_web_content`). Changing one applies to every
 open window of that profile, with no relaunch: the frame type, opaque and blur
 regions, each tab's default page background, and the frame tint are refreshed.
 Blur strength cannot be set here, because the Wayland protocol exposes none; set
 it in your compositor (see [blur strength on niri](#blur-strength-on-niri)).
 
-The launch switches and `helium://flags` entries below still work and **override**
+The launch switches and `helide://flags` entries below still work and **override**
 the Settings values when present, which is useful for scripted or test launches.
 Leave a flag on **Default** to use the Settings value. If an opacity flag was
-previously enabled in `helium://flags`, reset it to Default so the Settings slider
+previously enabled in `helide://flags`, reset it to Default so the Settings slider
 can take effect. Flags and switches are read at startup.
 
 
@@ -416,7 +455,7 @@ small arrow and then navigates.
 
 Turn it off in **Settings → Behavior → Slide pages when swiping** (on by
 default; the option is hidden outside Wayland). It is stored as the per-profile
-pref `helium.browser.wayland_swipe_page_preview`. It affects touchpad swipes
+pref `helide.browser.wayland_swipe_page_preview`. It affects touchpad swipes
 only; touchscreen swipes and pull-to-refresh are unchanged, and Chromium's own
 swipe-between-pages option still gates the gesture.
 
@@ -459,11 +498,11 @@ On **niri**, the [fork](https://github.com/sortedcord/niri) on the branch `feat/
 
 ```kdl
 touchpad-gesture fingers=3 modifiers="any" {
-    forward-to-client app-id="^helium$"
+    forward-to-client app-id="^helide$"
 }
 ```
 
-Over any other window the binding behaves like `ignore`. Helide's app-id is `helium`.
+Over any other window the binding behaves like `ignore`. Helide's app-id is `helide`.
 
 ### Tests
 
@@ -536,7 +575,7 @@ It runs Helide against [the fake Wayland compositor](tests/fake-wayland-composit
 ## Set the opacity
 
 Use **Settings → Appearance → Browser window opacity**, or open
-`helium://flags/#helium-frame-opacity`, choose an opacity, and relaunch the
+`helide://flags/#helide-frame-opacity`, choose an opacity, and relaunch the
 browser. Available values range from fully opaque to clear. At `0`, the browser UI
 background tint is invisible while text, icons, and controls remain visible.
 The default is fully opaque.
@@ -544,14 +583,14 @@ The default is fully opaque.
 Alternatively, pass an opacity at launch:
 
 ```sh
-helium --ozone-platform=wayland --helium-frame-opacity=0.8
+helide --ozone-platform=wayland --helide-frame-opacity=0.8
 ```
 
 The value is a number from `0` to `1`; for example, `0.8` means 80% opacity.
 Malformed, nonfinite, or out-of-range switch values fall back to fully opaque.
 With no switch, the Settings value is used. The switch is read at startup, so
 close the existing Helide process before relaunching. For the development build,
-the executable is `build/src/out/Default/helium`.
+the executable is `build/src/out/Default/helide`.
 
 Only the browser UI background uses this opacity. Web content remains opaque unless
 its separate transparency option is enabled. Custom theme background
@@ -561,15 +600,15 @@ may retain their own backgrounds.
 ## Enable or disable blur
 
 Turn on **Settings → Appearance → Blur behind the window**, or open
-`helium://flags/#helium-frame-blur`, choose **Enabled** or **Disabled**, and
+`helide://flags/#helide-frame-blur`, choose **Enabled** or **Disabled**, and
 relaunch. Default makes no blur request. Enable browser UI or website transparency
 so the effect can be seen. For example:
 
 ```sh
-helium --ozone-platform=wayland --helium-frame-opacity=0.8 --helium-frame-blur=1
+helide --ozone-platform=wayland --helide-frame-opacity=0.8 --helide-frame-blur=1
 ```
 
-Use `--helium-frame-blur=0` to remove Helide's request. A compositor window rule
+Use `--helide-frame-blur=0` to remove Helide's request. A compositor window rule
 that forces blur can override that choice. Fullscreen, app, popup, devtools, and
 picture-in-picture windows do not request this effect. Unsupported compositors
 keep transparency without blur.
@@ -605,7 +644,7 @@ global `blur { off }` disables blur even if Helide requests it.
   window rule with `xray false` to `~/.config/niri/config.kdl`:
   ```kdl
   window-rule {
-      match app-id="^helium$"
+      match app-id="^helide$"
       background-effect {
           xray false
       }
@@ -616,7 +655,7 @@ global `blur { off }` disables blur even if Helide requests it.
   To prevent this solid color from tinting the translucent frame:
   ```kdl
   window-rule {
-      match app-id="^helium$"
+      match app-id="^helide$"
       draw-border-with-background false
   }
   ```
@@ -629,13 +668,13 @@ and the [Wayland background-effect protocol](https://wayland.app/protocols/ext-b
 
 Turn on **Settings → Appearance → Transparent website backgrounds**, or enable
 **Transparent web content on Wayland** at
-`helium://flags/#helium-transparent-web-content` and relaunch. Alternatively:
+`helide://flags/#helide-transparent-web-content` and relaunch. Alternatively:
 
 ```sh
-helium --ozone-platform=wayland --helium-transparent-web-content=1
+helide --ozone-platform=wayland --helide-transparent-web-content=1
 ```
 
-Use `--helium-transparent-web-content=0` to keep the normal opaque backing.
+Use `--helide-transparent-web-content=0` to keep the normal opaque backing.
 This setting is independent of browser UI opacity: the UI can remain fully opaque
 while the page has transparent areas. It applies only to normal browser windows
 on native Wayland. Existing binaries need to be rebuilt to include this option.
@@ -651,8 +690,8 @@ and there is no opacity multiplier applied to text or images.
 Browser UI opacity and blur may be combined with this setting:
 
 ```sh
-helium --ozone-platform=wayland --helium-frame-opacity=0.8 \
-  --helium-frame-blur=1 --helium-transparent-web-content=1
+helide --ozone-platform=wayland --helide-frame-opacity=0.8 \
+  --helide-frame-blur=1 --helide-transparent-web-content=1
 ```
 
 The transparent default is stored on each tab's `WebContents`, so future
@@ -682,17 +721,17 @@ and an opaque CSS panel after every transition. `--pause 30` keeps the other tab
 active for 30 seconds before returning. It does not use the existing profile or
 change system/browser settings.
 
-## Automatic website transparency: Helium Glass
+## Automatic website transparency: Helide Glass
 
-The companion [Helium Glass extension](extensions/helium-glass/README.md)
+The companion [Helide Glass extension](extensions/helide-glass/README.md)
 analyzes each website's palette and gives its page backgrounds, cards, and
 neutral gradients different levels of transparency. Text, images, controls,
 and strong accent colors retain their normal opacity. Theme changes and
 dynamically added surfaces are detected automatically.
 
-Enable **Transparent web content on Wayland**, open `helium://extensions`,
+Enable **Transparent web content on Wayland**, open `helide://extensions`,
 enable **Developer mode**, and **Load unpacked** from
-[`extensions/helium-glass`](extensions/helium-glass). Reload existing pages.
+[`extensions/helide-glass`](extensions/helide-glass). Reload existing pages.
 Click the extension icon for a transparency slider, per-site toggle, contrast
 protection, and global switch. It runs locally and needs no browser rebuild.
 
@@ -700,7 +739,7 @@ The extension is an experimental automatic restyler. Some sites may need a
 lower strength or the site toggle; image backgrounds, pseudo-elements, and
 shadow DOM are not rewritten. See its README for installation, permissions,
 limitations, and tests, or try the included
-[surface demo](extensions/helium-glass/demo.html).
+[surface demo](extensions/helide-glass/demo.html).
 
 Version 0.2 starts at document creation, prioritizes visible backgrounds, and
 locally caches learned page-canvas colors for earlier styling on repeat visits.

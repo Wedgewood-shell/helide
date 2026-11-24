@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { stat } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
-import { HeliumBrowser } from './browser.js';
+import { HelideBrowser } from './browser.js';
 
 const tabId = z.string().describe('Stable tab ID returned by tabs_list or tabs_open.');
 const ref = z.string().describe('Element reference from page_inspect or page_find.');
@@ -14,7 +14,7 @@ const url = z.string().refine(value => {
     (!value.startsWith('about:') || value === 'about:blank'); } catch { return false; }
 }, 'Use an HTTP(S) URL or about:blank.');
 
-export function createServer(browser = new HeliumBrowser()) {
+export function createServer(browser = new HelideBrowser()) {
   const server = new McpServer({ name: 'helide-mcp', version: '0.1.0' });
   // Serialize tools in this MCP session. Explicit tab IDs still allow independent clients.
   let queue: Promise<unknown> = Promise.resolve();

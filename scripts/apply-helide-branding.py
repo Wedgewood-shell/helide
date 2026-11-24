@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Apply visible Helide strings/icons after upstream name/translation/resources.
 
-Internal URLs, preference keys, executable/profile names and upstream attribution
-are intentionally unchanged. Uses upstream GRIT fingerprint machinery so changed
+Internal helium:// URLs in strings become helide://; preference keys, switches,
+executable and profile names are renamed by apply-helide-rename.py afterwards.
+Upstream attribution is unchanged. Uses upstream GRIT fingerprint machinery so changed
 English messages and their translations keep matching.
 """
 import argparse
@@ -29,8 +30,12 @@ def write_changed(path, data):
 
 def brand_strings(tree, backups):
     util.add_grit_to_path(tree)
-    # Visible product name only. Do not change helium://, URLs or legal authors.
-    util.REPLACEMENT_REGEXES = [(re.compile(r'\bHelium\b(?!\s+Authors)'), 'Helide')]
+    # The visible product name, and internal URLs (helium:// is helide://, see
+    # apply-helide-rename.py). Not web URLs or legal authors.
+    util.REPLACEMENT_REGEXES = [
+        (re.compile(r'\bHelium\b(?!\s+Authors)'), 'Helide'),
+        (re.compile(r'(?<!\w)helium://'), 'helide://'),
+    ]
     original_replace = util.replace_grit_message
     protected = set()
 

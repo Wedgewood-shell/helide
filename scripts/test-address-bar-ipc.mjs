@@ -130,7 +130,7 @@ await session({ browserPrefs: { synergy_mode: true }, vmodule: 'helium_address_b
     })();
     await sleep(1500);
     await cdp.evaluate(settings.targetId,
-        `new Promise(r => chrome.settingsPrivate.setPref('helium.browser.synergy_mode', false, '', r))`);
+        `new Promise(r => chrome.settingsPrivate.setPref('helide.browser.synergy_mode', false, '', r))`);
     await waitFor(() => c.events('closed', m => m.window === windowId).length, 'a closed event');
     await waitFor(() => !existsSync(path), 'the socket to go away');
   });

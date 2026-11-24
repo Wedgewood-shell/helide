@@ -52,6 +52,7 @@ def main():
             "helium/linux/linux-three-finger-tab-scrub.patch",
             "helium/linux/linux-synergy-mode.patch",
             "helium/linux/linux-smart-sidebar-collapse.patch",
+            "helium/linux/linux-helide-rename.patch",
         ],
     )
     selected = parser.parse_args().patch

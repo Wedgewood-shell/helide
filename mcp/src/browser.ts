@@ -8,7 +8,7 @@ export function validateEndpoint(value: string): string {
   if (!['http:', 'https:'].includes(url.protocol) ||
       !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) ||
       url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
-    throw new Error('HELIUM_CDP_URL must be a loopback HTTP origin, e.g. http://127.0.0.1:9222');
+    throw new Error('HELIDE_CDP_URL must be a loopback HTTP origin, e.g. http://127.0.0.1:9222');
   }
   return url.origin;
 }
@@ -34,7 +34,7 @@ type Tab = { id: string; page: Page; owned: boolean; epoch: number };
 type Ref = { tab: Tab; epoch: number; handle: ElementHandle<Element> };
 type Transfer = { id: string; tab_id: string; download: Download; state: string; error?: string };
 
-export class HeliumBrowser {
+export class HelideBrowser {
   readonly endpoint: string;
   readonly artifacts: string;
   private browser?: Browser;
@@ -47,8 +47,9 @@ export class HeliumBrowser {
   private transfers = new Map<string, Transfer>();
   private transferOrder: string[] = [];
 
-  constructor(endpoint = process.env.HELIUM_CDP_URL ?? 'http://127.0.0.1:9222',
-    artifacts = process.env.HELIUM_MCP_ARTIFACTS ?? './artifacts') {
+  // HELIUM_* names from before the rename still work.
+  constructor(endpoint = process.env.HELIDE_CDP_URL ?? process.env.HELIUM_CDP_URL ?? 'http://127.0.0.1:9222',
+    artifacts = process.env.HELIDE_MCP_ARTIFACTS ?? process.env.HELIUM_MCP_ARTIFACTS ?? './artifacts') {
     this.endpoint = validateEndpoint(endpoint);
     this.artifacts = resolve(artifacts);
   }
@@ -173,7 +174,7 @@ export class HeliumBrowser {
     } catch { /* optional diagnostics */ }
     return { connected: true, endpoint: this.endpoint, version: browser.version(),
       browser_pid: pid, browser_started_at: pid ? await processStart(pid) : null, connected_at: this.connectedAt ?? null,
-      transport: 'CDP', attach_only: true, background_only_requires_patched_helium: true,
+      transport: 'CDP', attach_only: true, background_only_requires_patched_helide: true,
       capabilities: ['tabs', 'semantic_elements', 'read', 'input', 'screenshots', 'dialogs', 'uploads', 'download_observation'],
       unsupported: ['global_history', 'media_controls', 'capture_controls'] };
   }
@@ -189,7 +190,7 @@ export class HeliumBrowser {
   async open(url: string) {
     const browser = await this.connect();
     const context = browser.contexts()[0];
-    if (!context) throw new Error('No existing browser context. Open a Helium window first.');
+    if (!context) throw new Error('No existing browser context. Open a Helide window first.');
     const page = await context.newPage();
     const tab = this.register(page, true);
     try {

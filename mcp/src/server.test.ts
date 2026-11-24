@@ -10,10 +10,10 @@ import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { validateEndpoint } from './browser.js';
 
 async function clientFor(endpoint: string, artifacts?: string) {
-  const client = new Client({ name: 'helium-mcp-test', version: '1.0.0' });
+  const client = new Client({ name: 'helide-mcp-test', version: '1.0.0' });
   await client.connect(new StdioClientTransport({ command: process.execPath,
-    args: ['dist/index.js'], env: { ...process.env as Record<string, string>, HELIUM_CDP_URL: endpoint,
-      ...(artifacts ? { HELIUM_MCP_ARTIFACTS: artifacts } : {}) } }));
+    args: ['dist/index.js'], env: { ...process.env as Record<string, string>, HELIDE_CDP_URL: endpoint,
+      ...(artifacts ? { HELIDE_MCP_ARTIFACTS: artifacts } : {}) } }));
   return client;
 }
 
@@ -51,12 +51,12 @@ test('MCP stdio discovery works offline and connection failures are actionable',
 // Explicitly opt in: this starts ONLY an isolated headless browser with a fresh
 // temporary profile. It never attaches to the user's endpoint or profile.
 test('browser integration through real MCP stdio', {
-  skip: !process.env.HELIUM_TEST_EXECUTABLE,
+  skip: !process.env.HELIDE_TEST_EXECUTABLE,
   timeout: 90000,
 }, async () => {
-  const profile = await mkdtemp(join(tmpdir(), 'helium-mcp-test-'));
+  const profile = await mkdtemp(join(tmpdir(), 'helide-mcp-test-'));
   let context = await chromium.launchPersistentContext(profile, {
-    executablePath: process.env.HELIUM_TEST_EXECUTABLE, headless: true,
+    executablePath: process.env.HELIDE_TEST_EXECUTABLE, headless: true,
     args: ['--remote-debugging-port=0', '--no-first-run'],
   });
   let client: Client | undefined;
@@ -151,7 +151,7 @@ test('browser integration through real MCP stdio', {
     const offline = await client.callTool({ name: 'browser_status', arguments: {} });
     assert.equal(offline.isError, true);
     context = await chromium.launchPersistentContext(profile, {
-      executablePath: process.env.HELIUM_TEST_EXECUTABLE, headless: true,
+      executablePath: process.env.HELIDE_TEST_EXECUTABLE, headless: true,
       args: [`--remote-debugging-port=${port}`, '--no-first-run'],
     });
     assert.equal((await call('browser_status')).connected, true);

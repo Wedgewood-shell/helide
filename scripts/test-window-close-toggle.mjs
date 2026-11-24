@@ -9,7 +9,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { chromium } from '../mcp/node_modules/playwright-core/index.mjs';
 
 const executablePath = process.env.HELIDE_TEST_EXECUTABLE ??
-    fileURLToPath(new URL('../build/src/out/Default/helium', import.meta.url));
+    fileURLToPath(new URL('../build/src/out/Default/helide', import.meta.url));
 const profile = await mkdtemp(join(tmpdir(), 'helide-window-close-'));
 let context;
 
@@ -39,7 +39,7 @@ async function waitChecked(toggle, value) {
 
 async function savedValue() {
   const prefs = JSON.parse(await readFile(join(profile, 'Default/Preferences'), 'utf8'));
-  return prefs.helium?.browser?.show_window_close_button;
+  return prefs.helide?.browser?.show_window_close_button;
 }
 
 try {

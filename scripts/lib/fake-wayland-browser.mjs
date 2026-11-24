@@ -12,7 +12,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
 export const root = resolve(fileURLToPath(new URL('../..', import.meta.url)));
-export const browserPath = process.env.HELIDE_TEST_EXECUTABLE ?? join(root, 'build/src/out/Default/helium');
+export const browserPath = process.env.HELIDE_TEST_EXECUTABLE ?? join(root, 'build/src/out/Default/helide');
 export const compositorPath = join(root, 'build/fake-wayland-compositor/fake-wayland-compositor');
 export const STRIP_WIDTH = 215;  // the vertical tab strip, in pixels of the frame
 
@@ -124,7 +124,7 @@ export async function connectCdp(port) {
 }
 
 // ---- the browser -----------------------------------------------------------
-// `browserPrefs` go under helium.browser in the new profile's Preferences; the
+// `browserPrefs` go under helide.browser in the new profile's Preferences; the
 // vertical tab layout is the default. Smart sidebar collapse is off unless a
 // test turns it on, so the strip keeps the collapsed state a test asks for.
 // `prefs` are other top-level entries.
@@ -133,7 +133,7 @@ export async function launchBrowser(runtimeDir, socket, { browserPrefs = {}, pre
   mkdirSync(join(profile, 'Default'));
   writeFileSync(join(profile, 'Default/Preferences'), JSON.stringify({
     ...prefs,
-    helium: { browser: { layout: 2, smart_sidebar_collapse: false, ...browserPrefs } },
+    helide: { browser: { layout: 2, smart_sidebar_collapse: false, ...browserPrefs } },
   }));
   const child = spawn(browserPath, [
     '--ozone-platform=wayland', '--disable-gpu', `--user-data-dir=${profile}`,

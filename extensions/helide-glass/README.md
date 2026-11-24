@@ -1,6 +1,6 @@
-# Helium Glass
+# Helide Glass
 
-A companion extension for [Helide](https://github.com/sortedcord/helium-translucent-wayland). It
+A companion extension for [Helide](https://github.com/sortedcord/helide). It
 automatically samples each page's palette and replaces suitable background
 fills with translucent versions of their original colors. Light pages keep
 light tints; dark pages keep dark tints. Large page backgrounds become clearer
@@ -13,14 +13,14 @@ colors and suitable CSS gradient stops, rather than fading whole elements.
 
 1. Turn on **Settings → Appearance → Transparent website backgrounds** in this
    fork (no relaunch needed). Alternatively, enable **Transparent web content on
-   Wayland** at `helium://flags/#helium-transparent-web-content` and relaunch,
-   or launch with `--helium-transparent-web-content=1` on Wayland.
-2. Open `helium://extensions` (or `chrome://extensions`) and enable
+   Wayland** at `helide://flags/#helide-transparent-web-content` and relaunch,
+   or launch with `--helide-transparent-web-content=1` on Wayland.
+2. Open `helide://extensions` (or `chrome://extensions`) and enable
    **Developer mode**.
-3. Click **Load unpacked** and select this directory, `extensions/helium-glass`,
+3. Click **Load unpacked** and select this directory, `extensions/helide-glass`,
    which contains `manifest.json`. If using a release ZIP, extract it first and
    select the extracted directory containing the manifest.
-4. Reload already open websites, then pin **Helium Glass** in the extensions
+4. Reload already open websites, then pin **Helide Glass** in the extensions
    menu for quick access to its controls.
 
 The extension is enabled automatically on supported websites. No Chromium
@@ -29,7 +29,7 @@ In regular Chrome/Helium, it can change CSS fills but cannot make the browser's
 opaque page backing show the desktop.
 
 Optional compositor blur is controlled by Helide's separate **Blur behind the
-window** setting (or `--helium-frame-blur=1`). This extension does not set the compositor's
+window** setting (or `--helide-frame-blur=1`). This extension does not set the compositor's
 blur radius or change your browser launch settings.
 
 ## Configure
@@ -156,10 +156,10 @@ website. There is no compilation step.
 
 ```sh
 # From the repository root; Node's built-in test runner, no npm install.
-node --test extensions/helium-glass/test/*.test.cjs
+node --test extensions/helide-glass/test/*.test.cjs
 
-# Native Wayland integration check: built Helium, matching ChromeDriver, Pillow.
-python3 extensions/helium-glass/test/browser.py
+# Native Wayland integration check: built Helide, matching ChromeDriver, Pillow.
+python3 extensions/helide-glass/test/browser.py
 ```
 
 The browser check uses a temporary profile and local HTTP fixtures. It checks

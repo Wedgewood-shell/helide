@@ -13,7 +13,7 @@ def main():
     version = json.loads((ROOT / "manifest.json").read_text())["version"]
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path,
-        default=ROOT.parents[1] / "build/release" / f"helium-glass-{version}.zip")
+        default=ROOT.parents[1] / "build/release" / f"helide-glass-{version}.zip")
     args = parser.parse_args()
     files = ["manifest.json", "background.js", "shared.js", "palette.js", "cache.js", "content.js",
              "popup.html", "popup.css", "popup.js", "demo.html", "demo.css", "demo.js",

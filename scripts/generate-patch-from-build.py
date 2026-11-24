@@ -5,7 +5,10 @@ The baseline for each file is the pinned upstream Chromium file plus every
 patch that comes before it in the series, so the new patch applies on top of
 them. build/src has domain substitution applied (fake hosts such as
 cs.8n6r01d.qjz9zk). Lines that differ from upstream only by such a host are
-not edits, and the upstream line is kept.
+not edits, and the upstream line is kept. Likewise build/src has the Helide
+rename applied (scripts/apply-helide-rename.py, run after the patches): lines
+that differ only by it keep their text from before it, so the patch applies to
+the tree the patches see.
 
   scripts/generate-patch-from-build.py NAME.patch FILE... [--new FILE...]
 
@@ -21,8 +24,13 @@ import re
 import subprocess
 import tempfile
 import urllib.request
+import importlib.util
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+_spec = importlib.util.spec_from_file_location(
+    "helide_rename", ROOT / "scripts/apply-helide-rename.py")
+helide_rename = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(helide_rename)
 SRC = ROOT / "build/src"
 URL = re.compile(r"https?://\S+")
 FAKE_HOST = re.compile(r"\S*(?:qjz9zk|8n6r01d|ch40m1um|9oo91e)\S*")
@@ -51,12 +59,17 @@ LOOSE = re.compile(r"\S*\.\S*")
 
 def diff_lines(a, b, path):
     norm = (lambda x: LOOSE.sub("@", x)) if path.endswith((".grd", ".grdp")) else (lambda x: URL.sub("@", x))
-    ka = [norm(x) for x in a]
+    renamed = "".join(a)
+    renamed = helide_rename.rename_text(renamed, path).splitlines(keepends=True)
+    if len(renamed) != len(a):
+        renamed = a
+    ka = [norm(x) for x in renamed]
     kb = [norm(x) for x in b]
     merged = []
     for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, ka, kb, autojunk=False).get_opcodes():
         if tag == "equal":
-            merged += [a[i1 + k] if FAKE_HOST.search(b[j1 + k]) else b[j1 + k] for k in range(j2 - j1)]
+            merged += [a[i1 + k] if FAKE_HOST.search(b[j1 + k]) or renamed[i1 + k] != a[i1 + k]
+                       else b[j1 + k] for k in range(j2 - j1)]
         elif tag == "replace" and i2 - i1 == j2 - j1:
             # A bare domain in a comment or string that substitution rewrote.
             merged += [

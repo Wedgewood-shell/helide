@@ -6,3 +6,4 @@
 *.AppImage
 *.AppImage.zsync
 *.log
+__pycache__/
