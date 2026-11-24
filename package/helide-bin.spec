@@ -1,4 +1,4 @@
-%define version 0.20.3.1
+%define version 0.22.3.1
 %global debug_package %{nil}
 
 Name:    helide-bin
