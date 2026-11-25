@@ -1,16 +1,6 @@
---- a/chrome/browser/ui/views/frame/contents_web_view.h
-+++ b/chrome/browser/ui/views/frame/contents_web_view.h
-@@ -64,6 +64,7 @@
-   void SetWebContents(content::WebContents* web_contents) override;
- 
-   // content::WebContentsObserver overrides:
-+  void PrimaryPageChanged(content::Page& page) override;
-   // Overridden to track physical interactions (mouse/touch) on the WebContents.
-   // This allows the browser to force focus synchronization in split view even
-   // when native OS focus gets stuck on a different window (like a permission
 --- a/chrome/browser/ui/views/frame/contents_web_view.cc
 +++ b/chrome/browser/ui/views/frame/contents_web_view.cc
-@@ -150,6 +150,11 @@
+@@ -161,6 +161,11 @@
  }
  
  void ContentsWebView::SetWebContents(content::WebContents* web_contents) {
@@ -22,7 +12,7 @@
    views::WebView::SetWebContents(web_contents);
    if (web_contents == nullptr) {
      status_bubble_.reset();
-@@ -160,6 +165,9 @@
+@@ -171,6 +176,9 @@
      return;
    }
  
@@ -32,7 +22,7 @@
    UpdateIsBlockedByModal();
  
    if (!status_bubble_) {
-@@ -172,6 +180,16 @@
+@@ -183,6 +191,16 @@
    SafeInvoke(
        web_modal::WebContentsModalDialogManager::FromWebContents(web_contents))
        .Then(&web_modal::WebContentsModalDialogManager::UpdateDialogHost);
@@ -49,7 +39,7 @@
  }
  
  #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
-@@ -192,6 +210,9 @@
+@@ -213,6 +231,9 @@
  
  void ContentsWebView::UpdateBackgroundColor() {
    if (helium::ShouldAllowWaylandWebTransparency(this)) {
@@ -59,3 +49,13 @@
      // Clear the browser backing and Blink's default canvas. CSS background
      // painting is untouched, so opaque site backgrounds still cover the desktop
      // and transparent elements reveal their painted ancestors normally.
+--- a/chrome/browser/ui/views/frame/contents_web_view.h
++++ b/chrome/browser/ui/views/frame/contents_web_view.h
+@@ -59,6 +59,7 @@
+   void SetWebContents(content::WebContents* web_contents) override;
+ 
+   // content::WebContentsObserver overrides:
++  void PrimaryPageChanged(content::Page& page) override;
+   // Overridden to track physical interactions (mouse/touch) on the WebContents.
+   // This allows the browser to force focus synchronization in split view even
+   // when native OS focus gets stuck on a different window (like a permission

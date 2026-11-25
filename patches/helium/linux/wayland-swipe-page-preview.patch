@@ -1,7 +1,33 @@
+--- a/chrome/app/settings_strings.grdp
++++ b/chrome/app/settings_strings.grdp
+@@ -380,6 +380,12 @@
+     </message>
+     <message name="IDS_SETTINGS_WAYLAND_TRANSPARENT_WEB_CONTENT_DESCRIPTION" desc="Description for the toggle which lets pages with transparent backgrounds show the desktop behind the browser on Wayland.">
+       Lets pages with transparent backgrounds show the desktop. Sites that set an opaque background stay opaque.
++    </message>
++    <message name="IDS_SETTINGS_WAYLAND_SWIPE_PAGE_PREVIEW" desc="Label for the toggle which makes two-finger swipes between pages slide the page and show the previous or next page underneath.">
++      Slide pages when swiping
++    </message>
++    <message name="IDS_SETTINGS_WAYLAND_SWIPE_PAGE_PREVIEW_DESCRIPTION" desc="Description for the toggle which makes two-finger swipes between pages slide the page and show the previous or next page underneath.">
++      A two-finger swipe left or right on the touchpad moves the page and reveals the previous or next page, instead of only showing an arrow.
+     </message>
+     <message name="IDS_SETTINGS_LAYOUT" desc="Title of the settings section which controls how the browser UI is laid out.">
+       Layout
+--- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -245,6 +245,8 @@
+       settings_api::PrefType::kBoolean;
+   (*s_allowlist)[::prefs::kHeliumWaylandTransparentWebContent] =
+       settings_api::PrefType::kBoolean;
++  (*s_allowlist)[::prefs::kHeliumWaylandSwipePagePreview] =
++      settings_api::PrefType::kBoolean;
+ 
+   // Miscellaneous
+   (*s_allowlist)[::embedder_support::kAlternateErrorPagesEnabled] =
 --- a/chrome/browser/resources/settings/appearance_page/appearance_behavior_page.html
 +++ b/chrome/browser/resources/settings/appearance_page/appearance_behavior_page.html
-@@ -36,4 +36,12 @@
-       label="$i18n{allowSplitViewDragAndDrop}">
+@@ -42,4 +42,12 @@
+       sub-label="$i18n{keepPinsDescription}">
    </settings-toggle-button>
  
 +  <template is="dom-if" if="[[showWaylandOptions_]]">
@@ -43,6 +69,16 @@
  }
  
  declare global {
+--- a/chrome/browser/ui/browser_ui_prefs.cc
++++ b/chrome/browser/ui/browser_ui_prefs.cc
+@@ -146,6 +146,7 @@
+   registry->RegisterBooleanPref(prefs::kHeliumWaylandFrameBlur, false);
+   registry->RegisterBooleanPref(prefs::kHeliumWaylandTransparentWebContent,
+                                 false);
++  registry->RegisterBooleanPref(prefs::kHeliumWaylandSwipePagePreview, true);
+ 
+   registry->RegisterBooleanPref(prefs::kHeliumCenteredLocationBar, false);
+ 
 --- a/chrome/browser/ui/views/chrome_browser_main_extra_parts_views_linux.cc
 +++ b/chrome/browser/ui/views/chrome_browser_main_extra_parts_views_linux.cc
 @@ -7,8 +7,15 @@
@@ -112,18 +148,45 @@
    if (auto* linux_ui = ui::LinuxUi::instance()) {
      linux_ui->SetShutdownCb(base::BindOnce([] {
        chrome::SessionEnding();
+--- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
++++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+@@ -654,6 +654,9 @@
+        IDS_SETTINGS_WAYLAND_TRANSPARENT_WEB_CONTENT},
+       {"waylandTransparentWebContentDescription",
+        IDS_SETTINGS_WAYLAND_TRANSPARENT_WEB_CONTENT_DESCRIPTION},
++      {"waylandSwipePagePreview", IDS_SETTINGS_WAYLAND_SWIPE_PAGE_PREVIEW},
++      {"waylandSwipePagePreviewDescription",
++       IDS_SETTINGS_WAYLAND_SWIPE_PAGE_PREVIEW_DESCRIPTION},
+       {"layoutPageTitle", IDS_SETTINGS_LAYOUT},
+       {"browserLayout", IDS_SETTINGS_BROWSER_LAYOUT},
+       {"browserLayoutClassic", IDS_SETTINGS_BROWSER_LAYOUT_CLASSIC},
+--- a/chrome/common/pref_names.h
++++ b/chrome/common/pref_names.h
+@@ -641,6 +641,12 @@
+ // allowed to show transparent page backgrounds.
+ inline constexpr char kHeliumWaylandTransparentWebContent[] =
+     "helium.browser.wayland_transparent_web_content";
++
++// Linux (Wayland) only. A boolean pref set to true if a two-finger touchpad
++// swipe between pages should slide the page and reveal the previous or next
++// page underneath it.
++inline constexpr char kHeliumWaylandSwipePagePreview[] =
++    "helium.browser.wayland_swipe_page_preview";
+ 
+ // An enum (HeliumLayoutType) pref that controls the browser layout.
+ inline constexpr char kHeliumLayout[] = "helium.browser.layout";
 --- a/content/browser/BUILD.gn
 +++ b/content/browser/BUILD.gn
-@@ -2170,6 +2170,8 @@
+@@ -2194,6 +2194,8 @@
      "wake_lock/wake_lock_service_impl.h",
      "web_contents/aura/gesture_nav_simple.cc",
      "web_contents/aura/gesture_nav_simple.h",
 +    "web_contents/aura/swipe_page_transition.cc",
 +    "web_contents/aura/swipe_page_transition.h",
-     "web_contents/aura/types.cc",
-     "web_contents/aura/types.h",
-     "web_contents/drag_source_document_tracker.cc",
-@@ -3525,6 +3527,8 @@
+     "web_contents/file_chooser_impl.cc",
+     "web_contents/file_chooser_impl.h",
+     "web_contents/java_script_dialog_commit_deferring_condition.cc",
+@@ -3555,6 +3557,8 @@
        "renderer_host/render_widget_host_view_aura.h",
        "web_contents/aura/gesture_nav_simple.cc",
        "web_contents/aura/gesture_nav_simple.h",
@@ -142,12 +205,11 @@
  #include <utility>
  
  #include "base/memory/raw_ptr.h"
-@@ -12,10 +13,12 @@
+@@ -12,9 +13,11 @@
  #include "components/vector_icons/vector_icons.h"
  #include "content/browser/renderer_host/navigation_controller_impl.h"
  #include "content/browser/renderer_host/overscroll_controller.h"
 +#include "content/browser/web_contents/aura/swipe_page_transition.h"
- #include "content/browser/web_contents/aura/types.h"
  #include "content/browser/web_contents/web_contents_impl.h"
  #include "content/public/browser/overscroll_configuration.h"
  #include "content/public/browser/preloading.h"
@@ -156,16 +218,16 @@
  #include "ui/base/ui_base_features.h"
  #include "ui/compositor/layer_delegate.h"
 @@ -82,6 +85,9 @@
- constexpr gfx::Tween::Type kAbortAnimationTweenType =
      gfx::Tween::FAST_OUT_SLOW_IN;
  constexpr auto kAbortAnimationDuration = base::Milliseconds(300);
-+
+ 
 +// How far the page moves per DIP of touchpad swipe. Lower is slower.
 +constexpr float kSwipePageGain = 0.3f;
- 
++
  bool ShouldNavigateForward(NavigationController* controller,
                             OverscrollMode mode) {
-@@ -460,12 +466,110 @@
+   return mode == (base::i18n::IsRTL() ? OVERSCROLL_EAST : OVERSCROLL_WEST) &&
+@@ -404,12 +410,111 @@
  }
  
  GestureNavSimple::GestureNavSimple(WebContentsImpl* web_contents)
@@ -216,7 +278,8 @@
 +  }
 +
 +  NavigationControllerImpl& controller = web_contents_->GetController();
-+  const bool is_back = GetDirectionFromMode(mode_) == NavigationDirection::BACK;
++  const bool is_back =
++      mode_ == (base::i18n::IsRTL() ? OVERSCROLL_WEST : OVERSCROLL_EAST);
 +  NavigationEntry* destination = controller.GetEntryAtIndex(
 +      controller.GetLastCommittedEntryIndex() + (is_back ? -1 : 1));
 +  if (current.drawsNothing() || !destination) {
@@ -277,10 +340,10 @@
  }
  
  gfx::Size GestureNavSimple::GetDisplaySize() const {
-@@ -475,6 +579,17 @@
+@@ -419,6 +524,17 @@
  }
  
- bool GestureNavSimple::OnOverscrollUpdate(float delta_x, float delta_y) {
+ bool GestureNavSimple::OnOverscrollUpdate(float delta_x) {
 +  if (page_transition_pending_) {
 +    pending_delta_ = std::abs(delta_x);
 +    return true;
@@ -295,10 +358,10 @@
    if (!affordance_ || affordance_->IsFinishing()) {
      return false;
    }
-@@ -500,11 +615,21 @@
+@@ -442,11 +558,21 @@
+   DCHECK_EQ(mode_, overscroll_mode);
+ 
    mode_ = OVERSCROLL_NONE;
-   OverscrollSource overscroll_source = source_;
-   source_ = OverscrollSource::NONE;
 -  if (!affordance_ || affordance_->IsFinishing()) {
 -    return;
 -  }
@@ -321,21 +384,21 @@
 +  }
  
    NavigationControllerImpl& controller = web_contents_->GetController();
-   NavigationDirection direction = NavigationDirection::NONE;
-@@ -578,6 +703,12 @@
-       RecordGestureOverscrollCancelled(GetDirectionFromMode(old_mode), source_);
+   if (ShouldNavigateForward(&controller, overscroll_mode)) {
+@@ -497,6 +623,12 @@
+       RecordGestureOverscrollCancelled(old_mode);
        affordance_->Abort();
      }
 +    if (page_transition_pending_) {
 +      page_transition_pending_ = false;
 +    } else if (page_transition_ && !page_transition_->IsFinishing()) {
-+      RecordGestureOverscrollCancelled(GetDirectionFromMode(old_mode), source_);
++      RecordGestureOverscrollCancelled(old_mode);
 +      page_transition_->Abort();
 +    }
-     source_ = OverscrollSource::NONE;
      return;
    }
-@@ -609,23 +740,20 @@
+ 
+@@ -526,23 +658,20 @@
    max_delta_ = max_size - start_threshold;
    CHECK_LE(0, max_delta_, base::NotFatalUntil::M158);
  
@@ -389,7 +452,7 @@
  class WebContentsImpl;
  
  // A simple delegate for the overscroll controller that paints an arrow on top
-@@ -44,11 +48,28 @@
+@@ -44,10 +48,27 @@
                                cc::OverscrollBehavior behavior) override;
    std::optional<float> GetMaxOverscrollDelta() const override;
  
@@ -405,7 +468,6 @@
    raw_ptr<WebContentsImpl> web_contents_ = nullptr;
  
    OverscrollMode mode_ = OVERSCROLL_NONE;
-   OverscrollSource source_ = OverscrollSource::NONE;
    std::unique_ptr<Affordance> affordance_;
 +  std::unique_ptr<SwipeSnapshotCapturer> snapshot_capturer_;
 +  std::unique_ptr<SwipePageTransition> page_transition_;
@@ -420,7 +482,7 @@
    // When an overscroll is active, represents the maximum overscroll delta we
 --- a/content/public/browser/BUILD.gn
 +++ b/content/public/browser/BUILD.gn
-@@ -460,6 +460,7 @@
+@@ -462,6 +462,7 @@
      "supported_delegations.h",
      "surface_embed_connector.h",
      "swap_metrics_driver.h",
@@ -1259,66 +1321,3 @@
 +}  // namespace content
 +
 +#endif  // CONTENT_PUBLIC_BROWSER_SWIPE_PAGE_PREVIEW_H_
---- a/chrome/common/pref_names.h
-+++ b/chrome/common/pref_names.h
-@@ -641,6 +641,12 @@
- // allowed to show transparent page backgrounds.
- inline constexpr char kHeliumWaylandTransparentWebContent[] =
-     "helium.browser.wayland_transparent_web_content";
-+
-+// Linux (Wayland) only. A boolean pref set to true if a two-finger touchpad
-+// swipe between pages should slide the page and reveal the previous or next
-+// page underneath it.
-+inline constexpr char kHeliumWaylandSwipePagePreview[] =
-+    "helium.browser.wayland_swipe_page_preview";
- 
- // An enum (HeliumLayoutType) pref that controls the browser layout.
- inline constexpr char kHeliumLayout[] = "helium.browser.layout";
---- a/chrome/browser/ui/browser_ui_prefs.cc
-+++ b/chrome/browser/ui/browser_ui_prefs.cc
-@@ -141,6 +141,7 @@
-   registry->RegisterBooleanPref(prefs::kHeliumWaylandFrameBlur, false);
-   registry->RegisterBooleanPref(prefs::kHeliumWaylandTransparentWebContent,
-                                 false);
-+  registry->RegisterBooleanPref(prefs::kHeliumWaylandSwipePagePreview, true);
- 
-   registry->RegisterBooleanPref(prefs::kHeliumCenteredLocationBar, false);
- 
---- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
-+++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
-@@ -241,6 +241,8 @@
-       settings_api::PrefType::kBoolean;
-   (*s_allowlist)[::prefs::kHeliumWaylandTransparentWebContent] =
-       settings_api::PrefType::kBoolean;
-+  (*s_allowlist)[::prefs::kHeliumWaylandSwipePagePreview] =
-+      settings_api::PrefType::kBoolean;
- 
-   // Miscellaneous
-   (*s_allowlist)[::embedder_support::kAlternateErrorPagesEnabled] =
---- a/chrome/app/settings_strings.grdp
-+++ b/chrome/app/settings_strings.grdp
-@@ -308,6 +308,12 @@
-     </message>
-     <message name="IDS_SETTINGS_WAYLAND_TRANSPARENT_WEB_CONTENT_DESCRIPTION" desc="Description for the toggle which lets pages with transparent backgrounds show the desktop behind the browser on Wayland.">
-       Lets pages with transparent backgrounds show the desktop. Sites that set an opaque background stay opaque.
-+    </message>
-+    <message name="IDS_SETTINGS_WAYLAND_SWIPE_PAGE_PREVIEW" desc="Label for the toggle which makes two-finger swipes between pages slide the page and show the previous or next page underneath.">
-+      Slide pages when swiping
-+    </message>
-+    <message name="IDS_SETTINGS_WAYLAND_SWIPE_PAGE_PREVIEW_DESCRIPTION" desc="Description for the toggle which makes two-finger swipes between pages slide the page and show the previous or next page underneath.">
-+      A two-finger swipe left or right on the touchpad moves the page and reveals the previous or next page, instead of only showing an arrow.
-     </message>
-     <message name="IDS_SETTINGS_LAYOUT" desc="Title of the settings section which controls how the browser UI is laid out.">
-       Layout
---- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
-+++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
-@@ -623,6 +623,9 @@
-        IDS_SETTINGS_WAYLAND_TRANSPARENT_WEB_CONTENT},
-       {"waylandTransparentWebContentDescription",
-        IDS_SETTINGS_WAYLAND_TRANSPARENT_WEB_CONTENT_DESCRIPTION},
-+      {"waylandSwipePagePreview", IDS_SETTINGS_WAYLAND_SWIPE_PAGE_PREVIEW},
-+      {"waylandSwipePagePreviewDescription",
-+       IDS_SETTINGS_WAYLAND_SWIPE_PAGE_PREVIEW_DESCRIPTION},
-       {"layoutPageTitle", IDS_SETTINGS_LAYOUT},
-       {"browserLayout", IDS_SETTINGS_BROWSER_LAYOUT},
-       {"browserLayoutClassic", IDS_SETTINGS_BROWSER_LAYOUT_CLASSIC},

@@ -8,7 +8,7 @@
  #include "chrome/common/pref_names.h"
  #include "components/autofill/core/common/autofill_prefs.h"
  #include "components/bookmarks/common/bookmark_pref_names.h"
-@@ -243,6 +244,10 @@
+@@ -247,6 +248,10 @@
        settings_api::PrefType::kBoolean;
    (*s_allowlist)[::prefs::kHeliumWaylandSwipePagePreview] =
        settings_api::PrefType::kBoolean;
@@ -21,7 +21,7 @@
  
 --- a/chrome/browser/resources/settings/appearance_page/appearance_behavior_page.html
 +++ b/chrome/browser/resources/settings/appearance_page/appearance_behavior_page.html
-@@ -48,6 +48,18 @@
+@@ -54,6 +54,18 @@
          label="$i18n{waylandSwipePagePreview}"
          sub-label="$i18n{waylandSwipePagePreviewDescription}">
      </settings-toggle-button>
@@ -42,7 +42,7 @@
  </settings-section>
 --- a/chrome/browser/ui/browser_ui_prefs.cc
 +++ b/chrome/browser/ui/browser_ui_prefs.cc
-@@ -14,6 +14,7 @@
+@@ -16,6 +16,7 @@
  #include "chrome/browser/ui/ui_features.h"
  #include "chrome/browser/upgrade_detector/upgrade_detector.h"
  #include "chrome/common/buildflags.h"
@@ -50,7 +50,7 @@
  #include "chrome/common/helium_window_controls_prefs.h"
  #include "chrome/common/pref_names.h"
  #include "components/helium_services/pref_names.h"
-@@ -175,6 +176,8 @@
+@@ -180,6 +181,8 @@
    registry->RegisterBooleanPref(prefs::kShowExtensionsButton, true);
    registry->RegisterBooleanPref(prefs::kShowMenuButton, true);
    registry->RegisterBooleanPref(helium::kShowWindowCloseButton, true);
@@ -61,7 +61,7 @@
    registry->RegisterBooleanPref(prefs::kShowDynamicNewTabButton, true);
 --- a/chrome/browser/ui/views/frame/BUILD.gn
 +++ b/chrome/browser/ui/views/frame/BUILD.gn
-@@ -2085,6 +2085,7 @@
+@@ -2688,6 +2688,7 @@
        "//chrome/browser/ui/browser_window",
        "//chrome/browser/ui/views:layout_provider",
        "//chrome/browser/ui/views/frame:browser_view_header",
@@ -134,9 +134,55 @@
  
    base::ScopedObservation<ui::LinuxUi, ui::WindowButtonOrderObserver>
        window_button_order_observation_{this};
+--- a/chrome/browser/ui/views/helium/BUILD.gn
++++ b/chrome/browser/ui/views/helium/BUILD.gn
+@@ -44,3 +44,43 @@
+     ]
+   }
+ }
++
++if (is_linux) {
++  # Three-finger tab scrubbing: a vertical swipe moves through the tab strip, a
++  # horizontal swipe moves between split view panes, with a glow that follows
++  # the fingers.
++  source_set("tab_scrub") {
++    sources = [
++      "helium_tab_scrub_glow_view.cc",
++      "helium_tab_scrub_glow_view.h",
++      "helium_tab_scrub_model.cc",
++      "helium_tab_scrub_model.h",
++      "helium_tab_scrubber.cc",
++      "helium_tab_scrubber.h",
++    ]
++    public_deps = [
++      "//base",
++      "//ui/aura",
++      "//ui/events",
++      "//ui/views",
++    ]
++    deps = [
++      "//chrome/browser/profiles:profile",
++      "//chrome/browser/ui/browser_window",
++      "//chrome/browser/ui/tabs",
++      "//chrome/browser/ui/views/frame:browser_view_header",
++      "//chrome/browser/ui/views/frame:contents_container_view",
++      "//chrome/browser/ui/views/frame:contents_web_view",
++      "//chrome/browser/ui/views/frame:multi_contents_view",
++      "//chrome/browser/ui/views/tabs:tab",
++      "//chrome/browser/ui/views/tabs/common",
++      "//chrome/common:constants",
++      "//components/prefs",
++      "//components/tabs:public",
++      "//content/public/browser",
++      "//skia",
++      "//ui/color",
++      "//ui/gfx",
++    ]
++  }
++}
 --- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
 +++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
-@@ -717,6 +717,21 @@
+@@ -747,6 +747,21 @@
        {"themeManagedDialogBody", IDS_NTP_THEME_MANAGED_DIALOG_BODY},
    };
    html_source->AddLocalizedStrings(kLocalizedStrings);
@@ -160,7 +206,7 @@
                            base::FeatureList::IsEnabled(
 --- a/chrome/common/BUILD.gn
 +++ b/chrome/common/BUILD.gn
-@@ -567,6 +567,7 @@
+@@ -559,6 +559,7 @@
      "chrome_paths.h",
      "chrome_paths_internal.h",
      "chrome_result_codes.h",
@@ -170,7 +216,7 @@
      "pref_font_webkit_names.h",
 --- a/ui/ozone/platform/wayland/host/wayland_event_source.cc
 +++ b/ui/ozone/platform/wayland/host/wayland_event_source.cc
-@@ -928,6 +928,51 @@
+@@ -934,6 +934,51 @@
    }
  
    SetTargetAndDispatchEvent(&event, target);
@@ -224,7 +270,7 @@
  void WaylandEventSource::OnHoldEvent(EventType event_type,
 --- a/ui/ozone/platform/wayland/host/wayland_event_source.h
 +++ b/ui/ozone/platform/wayland/host/wayland_event_source.h
-@@ -183,6 +183,11 @@
+@@ -190,6 +190,11 @@
                     base::TimeTicks timestamp,
                     int device_id,
                     wl::EventDispatchPolicy dispatch_policy) override;
@@ -384,51 +430,6 @@
  };
  
  }  // namespace ui
---- /dev/null
-+++ b/chrome/browser/ui/views/helium/BUILD.gn
-@@ -0,0 +1,42 @@
-+# Copyright 2026 The Helide Authors
-+# Use of this source code is governed by the GPL-3.0 license in LICENSE.
-+
-+assert(is_linux)
-+
-+# Three-finger tab scrubbing: a vertical swipe moves through the tab strip, a
-+# horizontal swipe moves between split view panes, with a glow that follows
-+# the fingers.
-+source_set("tab_scrub") {
-+  sources = [
-+    "helium_tab_scrub_glow_view.cc",
-+    "helium_tab_scrub_glow_view.h",
-+    "helium_tab_scrub_model.cc",
-+    "helium_tab_scrub_model.h",
-+    "helium_tab_scrubber.cc",
-+    "helium_tab_scrubber.h",
-+  ]
-+  public_deps = [
-+    "//base",
-+    "//ui/aura",
-+    "//ui/events",
-+    "//ui/views",
-+  ]
-+  deps = [
-+    "//chrome/browser/profiles:profile",
-+    "//chrome/browser/ui/browser_window",
-+    "//chrome/browser/ui/tabs",
-+    "//chrome/browser/ui/views/frame:browser_view_header",
-+    "//chrome/browser/ui/views/frame:contents_container_view",
-+    "//chrome/browser/ui/views/frame:contents_web_view",
-+    "//chrome/browser/ui/views/frame:multi_contents_view",
-+    "//chrome/browser/ui/views/tabs:tab",
-+    "//chrome/browser/ui/views/tabs/common",
-+    "//chrome/common:constants",
-+    "//components/prefs",
-+    "//components/tabs:public",
-+    "//content/public/browser",
-+    "//skia",
-+    "//ui/color",
-+    "//ui/gfx",
-+  ]
-+}
 --- /dev/null
 +++ b/chrome/browser/ui/views/helium/helium_tab_scrub_glow_view.cc
 @@ -0,0 +1,101 @@

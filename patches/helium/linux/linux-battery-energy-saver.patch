@@ -1,6 +1,6 @@
 --- a/base/BUILD.gn
 +++ b/base/BUILD.gn
-@@ -1111,6 +1111,11 @@
+@@ -1117,6 +1117,11 @@
      ]
    }
  
@@ -12,7 +12,7 @@
    if (is_chromeos) {
      sources += [
        "process/process_priority_delegate.h",
-@@ -3134,7 +3139,7 @@
+@@ -3178,7 +3183,7 @@
  buildflag_header("power_monitor_buildflags") {
    header = "power_monitor_buildflags.h"
    header_dir = "base/power_monitor"
@@ -23,7 +23,7 @@
  }
 --- a/chrome/browser/performance_manager/BUILD.gn
 +++ b/chrome/browser/performance_manager/BUILD.gn
-@@ -235,6 +235,13 @@
+@@ -234,6 +234,13 @@
        "//third_party/perfetto:libperfetto",
        "//ui/accessibility:ax_base",
      ]
@@ -185,7 +185,7 @@
 +      kUPowerInterface, kUPowerOnBatteryProperty);
 +
    dbus_xdg::RequestXdgDesktopPortal(
-       session_bus_.get(),
+       session_bus_.get(), kPortalPowerProfileMonitorInterface,
        base::BindOnce(&PowerMonitorDeviceSourceLinux::OnPortalRequested,
 @@ -64,12 +106,13 @@
  

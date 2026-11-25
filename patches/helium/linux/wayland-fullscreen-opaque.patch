@@ -1,6 +1,6 @@
 --- a/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_linux.cc
 +++ b/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_linux.cc
-@@ -323,6 +323,10 @@
+@@ -344,6 +344,10 @@
      if (base::FeatureList::IsEnabled(features::kAsyncFullscreenWindowState)) {
        browser_view_->FullscreenStateChanged();
      }

@@ -8,7 +8,7 @@
  #include "chrome/common/helium_synergy_prefs.h"
  #include "chrome/common/helium_tab_scrub_prefs.h"
  #include "chrome/common/pref_names.h"
-@@ -252,6 +253,8 @@
+@@ -256,6 +257,8 @@
    (*s_allowlist)[::helium::kSynergyMode] = settings_api::PrefType::kBoolean;
    (*s_allowlist)[::helium::kSynergyAutohideAddressBar] =
        settings_api::PrefType::kBoolean;
@@ -50,7 +50,7 @@
      current_motion_ = motion;
      current_motion_info_ = std::move(motion_info);
      UpdateCurrentValues(base::Milliseconds(0), 0.0, params);
-@@ -619,7 +621,16 @@
+@@ -622,7 +624,16 @@
        logger_->MaybeLog();
        logger_.reset();
      }
@@ -67,7 +67,7 @@
      current_motion_ = BrowserAnimationMotion();
      PersistCurrentValues(params);
    }
-@@ -704,6 +715,8 @@
+@@ -707,6 +718,8 @@
  
    ValueLookup persisted_values_;
    ValueLookup current_values_;
@@ -78,7 +78,7 @@
    std::optional<Animator> animator_;
 --- a/chrome/browser/ui/browser_ui_prefs.cc
 +++ b/chrome/browser/ui/browser_ui_prefs.cc
-@@ -14,6 +14,7 @@
+@@ -16,6 +16,7 @@
  #include "chrome/browser/ui/ui_features.h"
  #include "chrome/browser/upgrade_detector/upgrade_detector.h"
  #include "chrome/common/buildflags.h"
@@ -86,7 +86,7 @@
  #include "chrome/common/helium_synergy_prefs.h"
  #include "chrome/common/helium_tab_scrub_prefs.h"
  #include "chrome/common/helium_window_controls_prefs.h"
-@@ -181,6 +182,7 @@
+@@ -186,6 +187,7 @@
    registry->RegisterBooleanPref(helium::kThreeFingerTabScrubInvert, false);
    registry->RegisterBooleanPref(helium::kSynergyMode, false);
    registry->RegisterBooleanPref(helium::kSynergyAutohideAddressBar, false);
@@ -96,7 +96,7 @@
    registry->RegisterBooleanPref(prefs::kShowDynamicNewTabButton, true);
 --- a/chrome/browser/ui/views/frame/BUILD.gn
 +++ b/chrome/browser/ui/views/frame/BUILD.gn
-@@ -2085,6 +2085,7 @@
+@@ -2692,6 +2692,7 @@
        "//chrome/browser/ui/browser_window",
        "//chrome/browser/ui/views:layout_provider",
        "//chrome/browser/ui/views/frame:browser_view_header",
@@ -150,46 +150,48 @@
        window_button_order_observation_{this};
 --- a/chrome/browser/ui/views/helium/BUILD.gn
 +++ b/chrome/browser/ui/views/helium/BUILD.gn
-@@ -18,12 +18,14 @@
-   public_deps = [
-     "//base",
-     "//ui/aura",
-+    "//ui/base",
-     "//ui/events",
-     "//ui/views",
-   ]
-   deps = [
-     "//chrome/browser/profiles:profile",
-     "//chrome/browser/ui/browser_window",
-+    "//chrome/browser/ui/color:color_headers",
-     "//chrome/browser/ui/tabs",
-     "//chrome/browser/ui/views/frame:browser_view_header",
-     "//chrome/browser/ui/views/frame:contents_container_view",
-@@ -40,3 +42,25 @@
-     "//ui/gfx",
-   ]
+@@ -61,12 +61,14 @@
+     public_deps = [
+       "//base",
+       "//ui/aura",
++      "//ui/base",
+       "//ui/events",
+       "//ui/views",
+     ]
+     deps = [
+       "//chrome/browser/profiles:profile",
+       "//chrome/browser/ui/browser_window",
++      "//chrome/browser/ui/color:color_headers",
+       "//chrome/browser/ui/tabs",
+       "//chrome/browser/ui/views/frame:browser_view_header",
+       "//chrome/browser/ui/views/frame:contents_container_view",
+@@ -333,3 +335,27 @@
+     ]
+   }
  }
 +
-+# Smart sidebar collapse: the vertical tab strip collapses in windows narrower
-+# than 65% of the screen, and expands in wider ones.
-+source_set("smart_sidebar") {
-+  sources = [
-+    "helium_smart_sidebar_collapse.cc",
-+    "helium_smart_sidebar_collapse.h",
-+  ]
-+  public_deps = [
-+    "//base",
-+    "//components/prefs",
-+    "//ui/views",
-+  ]
-+  deps = [
-+    "//chrome/browser/profiles:profile",
-+    "//chrome/browser/ui/browser_window",
-+    "//chrome/browser/ui/tabs",
-+    "//chrome/browser/ui/views/frame:browser_view_header",
-+    "//chrome/common:constants",
-+    "//ui/display",
-+  ]
++if (is_linux) {
++  # Smart sidebar collapse: the vertical tab strip collapses in windows
++  # narrower than 65% of the screen, and expands in wider ones.
++  source_set("smart_sidebar") {
++    sources = [
++      "helium_smart_sidebar_collapse.cc",
++      "helium_smart_sidebar_collapse.h",
++    ]
++    public_deps = [
++      "//base",
++      "//components/prefs",
++      "//ui/views",
++    ]
++    deps = [
++      "//chrome/browser/profiles:profile",
++      "//chrome/browser/ui/browser_window",
++      "//chrome/browser/ui/tabs",
++      "//chrome/browser/ui/views/frame:browser_view_header",
++      "//chrome/common:constants",
++      "//ui/display",
++    ]
++  }
 +}
 --- a/chrome/browser/ui/views/helium/helium_tab_scrub_glow_view.cc
 +++ b/chrome/browser/ui/views/helium/helium_tab_scrub_glow_view.cc
@@ -676,7 +678,7 @@
    std::vector<PaneItem> GatherPanes();
 --- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
 +++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
-@@ -732,6 +732,11 @@
+@@ -762,6 +762,11 @@
        u"Move the address bar to the top of the tab strip and the toolbar "
        u"buttons to its bottom, so web pages use the full window height. Not "
        u"available in Zen mode.");
@@ -690,7 +692,7 @@
    html_source->AddString(
 --- a/chrome/common/BUILD.gn
 +++ b/chrome/common/BUILD.gn
-@@ -567,6 +567,7 @@
+@@ -559,6 +559,7 @@
      "chrome_paths.h",
      "chrome_paths_internal.h",
      "chrome_result_codes.h",

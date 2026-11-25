@@ -10,7 +10,7 @@
  #if BUILDFLAG(IS_CHROMEOS)
 --- a/chrome/browser/ui/navigator/browser_navigator.cc
 +++ b/chrome/browser/ui/navigator/browser_navigator.cc
-@@ -727,7 +727,8 @@
+@@ -822,7 +822,8 @@
    }
  #endif  // BUILDFLAG(IS_CHROMEOS)
  
@@ -222,7 +222,7 @@
  
 --- a/components/url_formatter/url_fixer.cc
 +++ b/components/url_formatter/url_fixer.cc
-@@ -40,6 +40,8 @@
+@@ -41,6 +41,8 @@
  // Hardcode these constants to avoid dependences on //chrome and //content.
  const char kChromeUIScheme[] = "chrome";
  const char kHeliumUIScheme[] = "helium";
@@ -231,7 +231,7 @@
  const char kDevToolsScheme[] = "devtools";
  const char kChromeUIDefaultHost[] = "version";
  const char kViewSourceScheme[] = "view-source";
-@@ -448,7 +450,7 @@
+@@ -449,7 +451,7 @@
        if (GetValidScheme(*text, &parts->scheme, &scheme) &&
            (url::IsStandard(scheme) || scheme == url::kAboutScheme ||
             scheme == kChromeUIScheme || scheme == kHeliumUIScheme ||
@@ -240,7 +240,7 @@
          found_scheme = true;
        } else {
          (*text)[semicolon] = ';';
-@@ -464,7 +466,8 @@
+@@ -465,7 +467,8 @@
    // Proceed with about, chrome, and devtools schemes,
    // but not file or nonstandard schemes.
    if ((scheme != url::kAboutScheme) && (scheme != kChromeUIScheme) &&
@@ -250,7 +250,7 @@
        !url::IsStandard(scheme)) {
      return scheme;
    }
-@@ -624,11 +627,14 @@
+@@ -625,11 +628,14 @@
    bool chrome_url =
        (scheme == url::kAboutScheme)
        || (scheme == kChromeUIScheme)
@@ -269,7 +269,7 @@
      // We need to check whether the |username| is valid because it is our
 --- a/content/common/url_schemes.cc
 +++ b/content/common/url_schemes.cc
-@@ -62,6 +62,7 @@
+@@ -63,6 +63,7 @@
    url::AddStandardScheme(kChromeDevToolsScheme, url::SCHEME_WITH_HOST);
    url::AddStandardScheme(kChromeUIScheme, url::SCHEME_WITH_HOST);
    url::AddStandardScheme(kHeliumUIScheme, url::SCHEME_WITH_HOST);

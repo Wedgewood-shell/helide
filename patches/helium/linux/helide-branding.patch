@@ -1,14 +1,19 @@
 --- a/chrome/app/chrome_main_delegate.cc
 +++ b/chrome/app/chrome_main_delegate.cc
-@@ -475,7 +475,7 @@
- 
-   if (command_line.HasSwitch(switches::kVersion)) {
-     UNSAFE_TODO(printf(
--        "%s %s (Chromium %s)\n", version_info::GetProductName().data(),
-+        "Helide %s (Helium fork; Chromium %s; personal Linux build for Motobook 60 Pro)\n",
-         version_info::GetHeliumVersionNumber().data(),
-         version_info::GetVersionNumber().data()));
-     return true;
+@@ -439,9 +439,10 @@
+   if (print_product_version) {
+     UNSAFE_TODO(printf("%s\n", version_info::GetHeliumVersionNumber().data()));
+   } else {
+-    UNSAFE_TODO(printf("%s %s (Chromium %s)\n", PRODUCT_FULLNAME_STRING,
+-                       version_info::GetHeliumVersionNumber().data(),
+-                       CHROME_VERSION_STRING));
++    UNSAFE_TODO(printf(
++        "Helide %s (Helium fork; Chromium %s; personal Linux build for "
++        "Motobook 60 Pro)\n",
++        version_info::GetHeliumVersionNumber().data(), CHROME_VERSION_STRING));
+   }
+   fflush(stdout);
+   return true;
 --- a/chrome/browser/ui/webui/version/version_ui.cc
 +++ b/chrome/browser/ui/webui/version/version_ui.cc
 @@ -239,10 +239,9 @@

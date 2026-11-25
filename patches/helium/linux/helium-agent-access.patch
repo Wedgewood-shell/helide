@@ -1,6 +1,6 @@
 --- a/chrome/app/settings_strings.grdp
 +++ b/chrome/app/settings_strings.grdp
-@@ -314,6 +314,12 @@
+@@ -386,6 +386,12 @@
      </message>
      <message name="IDS_SETTINGS_WAYLAND_SWIPE_PAGE_PREVIEW_DESCRIPTION" desc="Description for the toggle which makes two-finger swipes between pages slide the page and show the previous or next page underneath.">
        A two-finger swipe left or right on the touchpad moves the page and reveals the previous or next page, instead of only showing an arrow.
@@ -15,7 +15,7 @@
        Layout
 --- a/chrome/browser/browser_process_impl.cc
 +++ b/chrome/browser/browser_process_impl.cc
-@@ -1371,6 +1371,7 @@
+@@ -1410,6 +1410,7 @@
                                  GoogleUpdateSettings::GetCollectStatsConsent());
    registry->RegisterBooleanPref(prefs::kDevToolsRemoteDebuggingAllowed, true);
    registry->RegisterBooleanPref(prefs::kDevToolsRemoteDebuggingEnabled, false);
@@ -25,7 +25,7 @@
    os_crypt_async::SecretPortalKeyProvider::RegisterLocalPrefs(registry);
 --- a/chrome/browser/devtools/BUILD.gn
 +++ b/chrome/browser/devtools/BUILD.gn
-@@ -515,7 +515,10 @@
+@@ -533,7 +533,10 @@
    }
  
    if (!is_android) {
@@ -39,9 +39,9 @@
  
 --- a/chrome/browser/devtools/chrome_devtools_manager_delegate.cc
 +++ b/chrome/browser/devtools/chrome_devtools_manager_delegate.cc
-@@ -15,6 +15,9 @@
- #include "base/values.h"
+@@ -16,6 +16,9 @@
  #include "build/build_config.h"
+ #include "chrome/browser/browser_process.h"
  #include "chrome/browser/devtools/chrome_devtools_session.h"
 +#if !BUILDFLAG(IS_ANDROID)
 +#include "chrome/browser/ui/helium/helium_agent_tabs.h"
@@ -49,7 +49,7 @@
  #include "chrome/browser/devtools/device/android_device_manager.h"
  #include "chrome/browser/devtools/device/tcp_device_provider.h"
  #include "chrome/browser/devtools/devtools_availability_checker.h"
-@@ -288,6 +291,18 @@
+@@ -291,6 +294,18 @@
    devtools_window->ActivateWindow();
  }
  
@@ -68,18 +68,18 @@
  void ChromeDevToolsManagerDelegate::HandleCommand(
      content::DevToolsAgentHostClientChannel* channel,
      base::span<const uint8_t> message,
-@@ -438,10 +453,23 @@
-     bool new_window) {
-   NavigateParams params(ProfileManager::GetLastUsedProfile(), url,
-                         ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+@@ -449,10 +464,23 @@
+     return nullptr;
+   }
+   NavigateParams params(profile, url, ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
 +#if !BUILDFLAG(IS_ANDROID)
 +  // With agent access on, tabs made by protocol clients open in the
 +  // background, in the Agent group, so they don't interrupt the user.
 +  const bool for_agent = helium::agent::IsAgentAccessEnabled();
-+  params.disposition = for_agent ? WindowOpenDisposition::NEW_BACKGROUND_TAB
-+                                 : WindowOpenDisposition::NEW_FOREGROUND_TAB;
++  params.disposition = for_agent ? WindowOpenDisposition::kNewBackgroundTab
++                                 : WindowOpenDisposition::kNewForegroundTab;
 +#else
-   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+   params.disposition = WindowOpenDisposition::kNewForegroundTab;
 +#endif
    Navigate(&params);
    if (!params.navigated_or_inserted_contents)
@@ -112,7 +112,7 @@
  #include "chrome/browser/devtools/devtools_browser_context_manager.h"
  #include "chrome/browser/profiles/profile_manager.h"
  #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
-@@ -122,9 +123,18 @@
+@@ -131,9 +132,18 @@
    }
  
    bool create_new_window = new_window.value_or(false);
@@ -133,7 +133,7 @@
    if (should_focus && create_in_background) {
      return protocol::Response::InvalidParams(
          "Can't focus a target in the background. Use background=false "
-@@ -225,6 +235,9 @@
+@@ -234,6 +244,9 @@
    if (!params.navigated_or_inserted_contents) {
      return protocol::Response::ServerError("Failed to open a new tab");
    }
@@ -250,7 +250,7 @@
    bool is_http_server_being_started_ = false;
 --- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
 +++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
-@@ -243,6 +243,8 @@
+@@ -247,6 +247,8 @@
        settings_api::PrefType::kBoolean;
    (*s_allowlist)[::prefs::kHeliumWaylandSwipePagePreview] =
        settings_api::PrefType::kBoolean;
@@ -261,8 +261,8 @@
    (*s_allowlist)[::embedder_support::kAlternateErrorPagesEnabled] =
 --- a/chrome/browser/resources/settings/appearance_page/appearance_behavior_page.html
 +++ b/chrome/browser/resources/settings/appearance_page/appearance_behavior_page.html
-@@ -36,6 +36,12 @@
-       label="$i18n{allowSplitViewDragAndDrop}">
+@@ -42,6 +42,12 @@
+       sub-label="$i18n{keepPinsDescription}">
    </settings-toggle-button>
  
 +  <settings-toggle-button class="hr" id="agentAccess"
@@ -286,7 +286,7 @@
        "//chrome/browser/ui/views/frame:browser_view_header",
 --- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
 +++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
-@@ -8,6 +8,7 @@
+@@ -9,6 +9,7 @@
  #include "base/metrics/histogram_macros.h"
  #include "base/notimplemented.h"
  #include "base/trace_event/trace_event.h"
@@ -294,7 +294,7 @@
  #include "chrome/app/chrome_command_ids.h"
  #include "chrome/browser/actor/actor_util.h"
  #include "chrome/browser/background/background_contents.h"
-@@ -749,6 +750,11 @@
+@@ -798,6 +799,11 @@
    if (index == TabStripModel::kNoTab) {
      return;
    }
@@ -320,7 +320,7 @@
 +  ]
 +  public_deps = [ "//base" ]
 +  deps = [
-+    "//chrome/browser:browser_public_dependencies",
++    "//chrome/browser:browser_process",
 +    "//chrome/browser/ui/browser_window",
 +    "//chrome/browser/ui/tabs:tab_strip",
 +    "//chrome/common:constants",
@@ -333,14 +333,14 @@
 +}
 --- a/chrome/browser/ui/navigator/BUILD.gn
 +++ b/chrome/browser/ui/navigator/BUILD.gn
-@@ -92,6 +92,7 @@
-       "//chrome/browser/ui:tab_helpers",
+@@ -95,6 +95,7 @@
+       "//chrome/browser/ui:status_bubble",
        "//chrome/browser/ui/browser_ui_controller",
        "//chrome/browser/ui/browser_window",
 +      "//chrome/browser/ui/helium:helium_agent_tabs",
        "//chrome/browser/ui/location_bar",
+       "//chrome/browser/ui/tabs:features",
        "//chrome/browser/ui/tabs:tab_strip",
-       "//chrome/browser/ui/web_applications",
 --- a/chrome/browser/ui/navigator/browser_navigator.cc
 +++ b/chrome/browser/ui/navigator/browser_navigator.cc
 @@ -69,6 +69,7 @@
@@ -351,7 +351,7 @@
  #include "content/public/browser/browser_url_handler.h"
  #include "content/public/browser/navigation_controller.h"
  #include "content/public/browser/navigation_entry.h"
-@@ -1198,8 +1199,26 @@
+@@ -1312,8 +1313,26 @@
  }  // namespace internal
  
  base::WeakPtr<content::NavigationHandle> Navigate(NavigateParams* params) {
@@ -360,12 +360,12 @@
 +  const bool from_agent_tab =
 +      helium::agent::IsAgentAccessEnabled() &&
 +      helium::agent::IsAgentTab(params->source_contents) &&
-+      (params->disposition == WindowOpenDisposition::NEW_FOREGROUND_TAB ||
-+       params->disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB ||
-+       params->disposition == WindowOpenDisposition::NEW_POPUP ||
-+       params->disposition == WindowOpenDisposition::NEW_WINDOW);
++      (params->disposition == WindowOpenDisposition::kNewForegroundTab ||
++       params->disposition == WindowOpenDisposition::kNewBackgroundTab ||
++       params->disposition == WindowOpenDisposition::kNewPopup ||
++       params->disposition == WindowOpenDisposition::kNewWindow);
 +  if (from_agent_tab) {
-+    params->disposition = WindowOpenDisposition::NEW_BACKGROUND_TAB;
++    params->disposition = WindowOpenDisposition::kNewBackgroundTab;
 +    params->window_action = NavigateParams::WindowAction::kNoAction;
 +  }
 +
@@ -381,7 +381,7 @@
  void Navigate(NavigateParams* params,
 --- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
 +++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
-@@ -626,6 +626,8 @@
+@@ -657,6 +657,8 @@
        {"waylandSwipePagePreview", IDS_SETTINGS_WAYLAND_SWIPE_PAGE_PREVIEW},
        {"waylandSwipePagePreviewDescription",
         IDS_SETTINGS_WAYLAND_SWIPE_PAGE_PREVIEW_DESCRIPTION},
@@ -392,7 +392,7 @@
        {"browserLayoutClassic", IDS_SETTINGS_BROWSER_LAYOUT_CLASSIC},
 --- a/chrome/common/pref_names.h
 +++ b/chrome/common/pref_names.h
-@@ -1916,6 +1916,14 @@
+@@ -1924,6 +1924,14 @@
  inline constexpr char kDevToolsRemoteDebuggingEnabled[] =
      "devtools.remote_debugging.user-enabled";
  
@@ -420,7 +420,7 @@
  #include "content/browser/devtools/protocol/devtools_mhtml_helper.h"
  #include "content/browser/devtools/protocol/emulation_handler.h"
  #include "content/browser/devtools/protocol/handler_helpers.h"
-@@ -1832,6 +1834,10 @@
+@@ -1817,6 +1819,10 @@
  
    WebContentsImpl* web_contents =
        static_cast<WebContentsImpl*>(WebContents::FromRenderFrameHost(host_));
@@ -433,7 +433,7 @@
    return Response::Success();
 --- a/content/browser/devtools/protocol/target_handler.cc
 +++ b/content/browser/devtools/protocol/target_handler.cc
-@@ -1288,6 +1288,11 @@
+@@ -1300,6 +1300,11 @@
    if (!agent_host) {
      return Response::InvalidParams(kTargetNotFound);
    }

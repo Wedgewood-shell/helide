@@ -121,6 +121,33 @@ def rename_line(line, path):
     return rename_text(line, path)
 
 
+_HELIDE = re.compile(r'helide|Helide|HELIDE')
+_TO_HELIUM = {'helide': 'helium', 'Helide': 'Helium', 'HELIDE': 'HELIUM'}
+
+
+def unrename_line(line, path):
+    """The text of `line` from before this step, for a line written in the
+    renamed tree: the variant with the most Helide -> Helium replacements that
+    this step turns back into `line`. Lines it does not produce stay."""
+    matches = list(_HELIDE.finditer(line))
+    if not matches or len(matches) > 8:
+        return line
+    best, best_count = line, 0
+    for mask in range(1, 1 << len(matches)):
+        count = bin(mask).count('1')
+        if count <= best_count:
+            continue
+        parts, last = [], 0
+        for i, m in enumerate(matches):
+            if mask >> i & 1:
+                parts += [line[last:m.start()], _TO_HELIUM[m.group()]]
+                last = m.end()
+        candidate = ''.join(parts) + line[last:]
+        if rename_text(candidate, path) == line:
+            best, best_count = candidate, count
+    return best
+
+
 def candidate_files(tree):
     for top in SCAN_DIRS:
         for path in (tree / top).rglob('*'):

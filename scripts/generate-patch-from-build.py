@@ -74,11 +74,12 @@ def diff_lines(a, b, path):
             # A bare domain in a comment or string that substitution rewrote.
             merged += [
                 a[i1 + k] if FAKE_HOST.search(b[j1 + k]) and LOOSE.sub("@", a[i1 + k]) == LOOSE.sub("@", b[j1 + k])
-                else b[j1 + k]
+                else helide_rename.unrename_line(b[j1 + k], path)
                 for k in range(j2 - j1)
             ]
         else:
-            merged += b[j1:j2]
+            # New lines are written as they were before the Helide rename.
+            merged += [helide_rename.unrename_line(x, path) for x in b[j1:j2]]
     return list(difflib.unified_diff(a, merged, f"a/{path}", f"b/{path}", n=3))
 
 
@@ -147,6 +148,7 @@ def main():
             out.append("".join(d))
         for path in sorted(args.new):
             b = (SRC / path).read_text().splitlines(keepends=True)
+            b = [helide_rename.unrename_line(x, path) for x in b]
             out.append("".join(difflib.unified_diff([], b, "/dev/null", f"b/{path}", n=3)))
 
     text = ""
