@@ -106,8 +106,8 @@ show the desktop behind the window. Webpages keep an opaque backing by default;
 website transparency is opt-in and respects the site's CSS. Text, images, and
 browser controls keep their normal opacity. These features are off by default.
 
-Helide is based on Helium Linux `0.20.3.1`, shared Helium commit
-`2f81b9cafa38a95071e20de3f9cd6b0aca6d3c65`, and Chromium `156.0.8078.79`.
+Helide is based on Helium Linux `0.22.3.1`, shared Helium commit
+`f614c17d580a921029fa53bd72b8202e10d94676`, and Chromium `158.0.8127.36`.
 It requires a native Wayland session and client side browser decorations. The
 compositor blends transparent pixels with the desktop. An optional blur request
 is available on compositors supporting `ext-background-effect-v1`.

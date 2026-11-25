@@ -1,7 +1,7 @@
 # Wayland frame opacity experiment
 
-This Linux patch targets Helium 0.20.3.1, its pinned shared patch commit
-`2f81b9cafa38a95071e20de3f9cd6b0aca6d3c65`, and Chromium 156.0.8078.79.
+This Linux patch targets Helium 0.22.3.1, its pinned shared patch commit
+`f614c17d580a921029fa53bd72b8202e10d94676`, and Chromium 158.0.8127.36.
 
 After a future build, choose an opacity with **Settings → Appearance → Browser
 window opacity** (applied live), or in `helide://flags/#helide-frame-opacity` and
@@ -79,10 +79,10 @@ adds a compositor blur request; see the [blur configuration in the README](../RE
 Protocol and source references:
 
 - [Wayland opaque-region semantics](https://wayland.app/protocols/wayland#wl_surface:request:set_opaque_region)
-- [Pinned Linux browser initialization](https://github.com/chromium/chromium/blob/156.0.8078.79/chrome/browser/ui/views/frame/browser_native_widget_aura_linux.cc)
-- [Pinned Linux browser frame hints](https://github.com/chromium/chromium/blob/156.0.8078.79/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_linux.cc)
-- [Pinned Wayland surface handling](https://github.com/chromium/chromium/blob/156.0.8078.79/ui/ozone/platform/wayland/host/wayland_window.cc)
-- [Pinned content backing](https://github.com/chromium/chromium/blob/156.0.8078.79/chrome/browser/ui/views/frame/contents_web_view.cc)
+- [Pinned Linux browser initialization](https://github.com/chromium/chromium/blob/158.0.8127.36/chrome/browser/ui/views/frame/browser_native_widget_aura_linux.cc)
+- [Pinned Linux browser frame hints](https://github.com/chromium/chromium/blob/158.0.8127.36/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_linux.cc)
+- [Pinned Wayland surface handling](https://github.com/chromium/chromium/blob/158.0.8127.36/ui/ozone/platform/wayland/host/wayland_window.cc)
+- [Pinned content backing](https://github.com/chromium/chromium/blob/158.0.8127.36/chrome/browser/ui/views/frame/contents_web_view.cc)
 
 ## Validation without building
 
