@@ -1,7 +1,7 @@
 (() => {
   "use strict";
   const VERSION = 1, MAX_PAGES = 64, MAX_SURFACES = 24, MAX_AGE = 7 * 86400000;
-  const MEASURING = "data-helide-glass-measuring";
+  const MEASURING = "data-helide-styles-measuring";
   const ATTRIBUTES = ["class", "data-theme", "data-color-mode", "data-color-scheme", "color-scheme"];
   function pageKey(url) {
     try {
@@ -46,6 +46,6 @@
       .sort((a, b) => b[1].time - a[1].time).slice(0, MAX_PAGES));
   }
   const api = { VERSION, MAX_PAGES, MAX_SURFACES, MAX_AGE, MEASURING, pageKey, allowedSelector, attributes, valid, css, prune };
-  globalThis.HelideGlassCache = api;
+  globalThis.HelideStylesCache = api;
   if (typeof module !== "undefined") module.exports = api;
 })();

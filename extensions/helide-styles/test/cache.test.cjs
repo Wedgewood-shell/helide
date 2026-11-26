@@ -28,9 +28,9 @@ test('replay is guarded by page theme attributes and excluded during original-st
   assert.match(css, /\[class="dark"\]/);
   assert.match(css, /:has\(>body/);
   assert.ok(css.includes('night\\22 \\5c '));
-  assert.match(css, /:not\(\[data-helide-glass-measuring\]\)/);
+  assert.match(css, /:not\(\[data-helide-styles-measuring\]\)/);
   // Keep replay active while newly marked elements wait for fresh CSS to arrive.
-  assert.doesNotMatch(css, /data-helide-glass-surface/);
+  assert.doesNotMatch(css, /data-helide-styles-surface/);
 });
 test('invalid selectors, colors and oversized entries cannot produce cached CSS', () => {
   for (const selector of ['*', 'button', '#a;}body{color:red', 'body,video']) {

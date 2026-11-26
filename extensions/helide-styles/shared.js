@@ -20,5 +20,5 @@
   function isEnabled(settings, site) {
     return Boolean(settings.enabled && settings.transparency > 0 && settings.sites[site] !== false);
   }
-  globalThis.HelideGlassSettings = { DEFAULTS, normalize, siteKey, isEnabled };
+  globalThis.HelideStylesSettings = { DEFAULTS, normalize, siteKey, isEnabled };
 })();

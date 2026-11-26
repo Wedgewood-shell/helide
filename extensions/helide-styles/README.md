@@ -1,4 +1,4 @@
-# Helide Glass
+# Helide Styles
 
 A companion extension for [Helide](https://github.com/sortedcord/helide). It
 automatically samples each page's palette and replaces suitable background
@@ -17,10 +17,10 @@ colors and suitable CSS gradient stops, rather than fading whole elements.
    or launch with `--helide-transparent-web-content=1` on Wayland.
 2. Open `helide://extensions` (or `chrome://extensions`) and enable
    **Developer mode**.
-3. Click **Load unpacked** and select this directory, `extensions/helide-glass`,
+3. Click **Load unpacked** and select this directory, `extensions/helide-styles`,
    which contains `manifest.json`. If using a release ZIP, extract it first and
    select the extracted directory containing the manifest.
-4. Reload already open websites, then pin **Helide Glass** in the extensions
+4. Reload already open websites, then pin **Helide Styles** in the extensions
    menu for quick access to its controls.
 
 The extension is enabled automatically on supported websites. No Chromium
@@ -55,6 +55,25 @@ cards. For local files, open the extension's **Details** page and enable
 **Allow access to file URLs** first. Alternatively, run
 `python3 -m http.server 8765 --bind 127.0.0.1` from this directory and visit
 `http://127.0.0.1:8765/demo.html`.
+
+## Compatibility with Helide's canvas noising
+
+Helide's anti-fingerprinting (**Helium Noise**, on by default) perturbs canvas
+pixel read-back by a level or so. Versions before 0.3.0 read page colors back
+through a 1×1 canvas, so on Helide 0.22 (Chromium 158) every tint came out a
+level off, and nearly clear colors lost their hue to premultiplied alpha.
+Colors are now parsed in script (`rgb()`, `hsl()`, hex, `color(srgb …)`,
+`oklab()`, `oklch()`, `lab()`, `lch()`), which is exact. A canvas is used only
+for forms it cannot read (named colors, `color(display-p3 …)`). The parser is
+checked against Chromium's own conversion in `test/palette.test.cjs`.
+
+## Upgrading from Helide Glass
+
+The extension was renamed from *Helide Glass* to *Helide Styles* (0.3.0) and
+moved to `extensions/helide-styles`. Its ID depends on the folder, so Helide
+treats it as a new extension and starts with default settings. Remove the old
+entry at `helide://extensions` before loading the new folder; both at once
+would fight over the same page elements.
 
 ## How it works
 
@@ -156,10 +175,10 @@ website. There is no compilation step.
 
 ```sh
 # From the repository root; Node's built-in test runner, no npm install.
-node --test extensions/helide-glass/test/*.test.cjs
+node --test extensions/helide-styles/test/*.test.cjs
 
 # Native Wayland integration check: built Helide, matching ChromeDriver, Pillow.
-python3 extensions/helide-glass/test/browser.py
+python3 extensions/helide-styles/test/browser.py
 ```
 
 The browser check uses a temporary profile and local HTTP fixtures. It checks

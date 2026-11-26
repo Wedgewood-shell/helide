@@ -21,7 +21,7 @@ from PIL import Image
 
 EXTENSION = Path(__file__).resolve().parents[1]
 OUT = EXTENSION.parents[1] / "build/src/out/Default"
-FIXTURE = """<!doctype html><meta charset=utf-8><title>Glass test</title>
+FIXTURE = """<!doctype html><meta charset=utf-8><title>Styles test</title>
 <style nonce=fixture>
 html,body{margin:0;min-height:100%;background:rgb(245,246,248);color:rgb(24,26,31)}
 body{min-height:900px;padding:40px;box-sizing:border-box}
@@ -84,7 +84,7 @@ def main():
     args = parser.parse_args()
     server = ThreadingHTTPServer(("127.0.0.1", 0), FixtureHandler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    with tempfile.TemporaryDirectory(prefix="helide-glass-test-") as temp:
+    with tempfile.TemporaryDirectory(prefix="helide-styles-test-") as temp:
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
             port = sock.getsockname()[1]
@@ -135,7 +135,7 @@ def main():
                             print("PASS " + label, flush=True)
                             return
                         time.sleep(.15)
-                    state = js("return [...document.querySelectorAll('html,body,[id]')].map(e=>[e.id||e.tagName,getComputedStyle(e).backgroundColor,e.getAttribute('data-helide-glass-surface')])")
+                    state = js("return [...document.querySelectorAll('html,body,[id]')].map(e=>[e.id||e.tagName,getComputedStyle(e).backgroundColor,e.getAttribute('data-helide-styles-surface')])")
                     raise AssertionError((label, state))
 
                 style = "const c=getComputedStyle(document.querySelector(arguments[0])).backgroundColor;return c;"
@@ -160,7 +160,7 @@ def main():
                     return
                 url = f"http://127.0.0.1:{server.server_port}/csp"
                 command("/url", {"url": url})
-                wait("return document.body.hasAttribute('data-helide-glass-surface') && getComputedStyle(document.body).backgroundColor.startsWith('rgba(')", "page backgrounds styled under strict CSP")
+                wait("return document.body.hasAttribute('data-helide-styles-surface') && getComputedStyle(document.body).backgroundColor.startsWith('rgba(')", "page backgrounds styled under strict CSP")
                 wait("return getComputedStyle(document.querySelector('#card')).backgroundColor.startsWith('rgba(')", "cards get translucent fills")
                 assert js(alpha, "body") < .1
                 assert 0 < js(alpha, "#card") < 1
@@ -187,7 +187,7 @@ def main():
                     assert js(style, "body") == initial_background, "rescanning must not compound alpha"
                 print("PASS repeated scans retain the same background alpha", flush=True)
                 js("const e=document.createElement('div');e.id='dynamic';e.className='card';e.textContent='New card';document.body.append(e)")
-                wait("return document.querySelector('#dynamic').hasAttribute('data-helide-glass-surface')", "dynamic surfaces detected")
+                wait("return document.querySelector('#dynamic').hasAttribute('data-helide-styles-surface')", "dynamic surfaces detected")
                 js("document.documentElement.classList.add('dark')")
                 wait("return getComputedStyle(document.body).backgroundColor.startsWith('rgba(24, 26, 31,')", "theme change uses original dark palette")
                 wait("return getComputedStyle(document.querySelector('#card')).backgroundColor.startsWith('rgba(38, 40, 46,')", "cards follow the new theme")
@@ -216,24 +216,24 @@ def main():
                     command("/window", {"handle": first})
 
                 settings({"sites": {f"127.0.0.1:{server.server_port}": False}})
-                wait("return !document.querySelector('[data-helide-glass-surface]') && getComputedStyle(document.body).backgroundColor==='rgb(24, 26, 31)'", "site opt-out restores original page styles")
+                wait("return !document.querySelector('[data-helide-styles-surface]') && getComputedStyle(document.body).backgroundColor==='rgb(24, 26, 31)'", "site opt-out restores original page styles")
                 frame = js("return document.querySelector('#frame')")
                 command("/frame", {"id": frame})
-                wait("return !document.querySelector('[data-helide-glass-surface]')", "site opt-out includes cross-origin embedded frames")
+                wait("return !document.querySelector('[data-helide-styles-surface]')", "site opt-out includes cross-origin embedded frames")
                 command("/frame", {"id": None})
                 settings({"enabled": True, "transparency": 80})
-                wait("return document.body.hasAttribute('data-helide-glass-surface') && getComputedStyle(document.body).backgroundColor.startsWith('rgba(')", "re-enable restores transparency")
+                wait("return document.body.hasAttribute('data-helide-styles-surface') && getComputedStyle(document.body).backgroundColor.startsWith('rgba(')", "re-enable restores transparency")
                 frame = js("return document.querySelector('#frame')")
                 command("/frame", {"id": frame})
-                wait("return document.body.hasAttribute('data-helide-glass-surface')", "cross-origin embedded surfaces are styled")
+                wait("return document.body.hasAttribute('data-helide-styles-surface')", "cross-origin embedded surfaces are styled")
                 command("/frame", {"id": None})
                 settings({"enabled": False})
-                wait("return !document.querySelector('[data-helide-glass-surface]') && getComputedStyle(document.body).backgroundColor==='rgb(24, 26, 31)'", "global disable restores original styles")
+                wait("return !document.querySelector('[data-helide-styles-surface]') && getComputedStyle(document.body).backgroundColor==='rgb(24, 26, 31)'", "global disable restores original styles")
                 settings({"transparency": 0})
-                wait("return !document.querySelector('[data-helide-glass-surface]')", "zero transparency keeps original styles")
+                wait("return !document.querySelector('[data-helide-styles-surface]')", "zero transparency keeps original styles")
                 settings({"transparency": 65})
                 command("/refresh", {})
-                wait("return document.body.hasAttribute('data-helide-glass-surface')", "settings survive reload")
+                wait("return document.body.hasAttribute('data-helide-styles-surface')", "settings survive reload")
 
                 command("/url", {"url": startup_url})
                 loading_timing("first visit before DOM ready")
@@ -243,7 +243,7 @@ def main():
 
                 def startup_status(page_url=startup_url):
                     command("/window", {"handle": second})
-                    result = command("/execute/async", {"script": "const url=arguments[0],done=arguments[arguments.length-1];chrome.tabs.query({}).then(tabs=>chrome.tabs.sendMessage(tabs.find(tab=>tab.url===url).id,{type:'HELIDE_GLASS_STATUS'},{frameId:0})).then(done,e=>done({error:e.message}));", "args": [page_url]})
+                    result = command("/execute/async", {"script": "const url=arguments[0],done=arguments[arguments.length-1];chrome.tabs.query({}).then(tabs=>chrome.tabs.sendMessage(tabs.find(tab=>tab.url===url).id,{type:'HELIDE_STYLES_STATUS'},{frameId:0})).then(done,e=>done({error:e.message}));", "args": [page_url]})
                     command("/window", {"handle": first})
                     assert not result.get("error"), result
                     return result["startup"]
@@ -275,7 +275,7 @@ def main():
                 assert all(not frame["color"].startswith(("rgb(32, 33, 36)", "rgba(32, 33, 36,")) for frame in probe["frames"]), probe
                 wait("return getComputedStyle(document.body).backgroundColor.startsWith('rgba(245, 246, 248,')", "fresh analysis replaces the previous palette")
                 print("PASS a cached dark theme does not tint a light-themed reload", flush=True)
-                print("All Helide Glass browser checks passed.", flush=True)
+                print("All Helide Styles browser checks passed.", flush=True)
             except Exception:
                 log.flush(); log.seek(0)
                 print(log.read()[-5000:], flush=True)

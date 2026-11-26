@@ -208,7 +208,7 @@ Helium's runtime identifiers are renamed too:
 | Preference keys | `helium.browser.layout` | `helide.browser.layout` |
 | Launch switches and flags | `--helium-frame-opacity` | `--helide-frame-opacity` |
 | Config directory override | `HELIUM_CONFIG_HOME` | `HELIDE_CONFIG_HOME` (the old name still works) |
-| Companion extension | Helium Glass | Helide Glass |
+| Companion extension | Helium Glass | Helide Styles |
 
 - **Your profile moves by itself.** On the first start, Helide moves
   `~/.config/net.imput.helium` (and its cache in `~/.cache`) to the new name and
@@ -721,9 +721,9 @@ and an opaque CSS panel after every transition. `--pause 30` keeps the other tab
 active for 30 seconds before returning. It does not use the existing profile or
 change system/browser settings.
 
-## Automatic website transparency: Helide Glass
+## Automatic website transparency: Helide Styles
 
-The companion [Helide Glass extension](extensions/helide-glass/README.md)
+The companion [Helide Styles extension](extensions/helide-styles/README.md)
 analyzes each website's palette and gives its page backgrounds, cards, and
 neutral gradients different levels of transparency. Text, images, controls,
 and strong accent colors retain their normal opacity. Theme changes and
@@ -731,7 +731,7 @@ dynamically added surfaces are detected automatically.
 
 Enable **Transparent web content on Wayland**, open `helide://extensions`,
 enable **Developer mode**, and **Load unpacked** from
-[`extensions/helide-glass`](extensions/helide-glass). Reload existing pages.
+[`extensions/helide-styles`](extensions/helide-styles). Reload existing pages.
 Click the extension icon for a transparency slider, per-site toggle, contrast
 protection, and global switch. It runs locally and needs no browser rebuild.
 
@@ -739,7 +739,7 @@ The extension is an experimental automatic restyler. Some sites may need a
 lower strength or the site toggle; image backgrounds, pseudo-elements, and
 shadow DOM are not rewritten. See its README for installation, permissions,
 limitations, and tests, or try the included
-[surface demo](extensions/helide-glass/demo.html).
+[surface demo](extensions/helide-styles/demo.html).
 
 Version 0.2 starts at document creation, prioritizes visible backgrounds, and
 locally caches learned page-canvas colors for earlier styling on repeat visits.

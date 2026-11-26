@@ -1,6 +1,6 @@
 "use strict";
 importScripts("shared.js", "cache.js");
-const S = HelideGlassSettings, C = HelideGlassCache;
+const S = HelideStylesSettings, C = HelideStylesCache;
 let settings = S.normalize(), entries = {}, writes = Promise.resolve();
 const loaded = chrome.storage.local.get(["settings", "surfaceCache"]).then(value => {
   settings = S.normalize(value.settings); entries = C.prune(value.surfaceCache);
@@ -19,13 +19,13 @@ function targetFor(sender) {
 }
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (sender.id !== chrome.runtime.id || !sender.tab) return false;
-  if (!["HELIDE_GLASS_CONTEXT", "HELIDE_GLASS_CACHE", "HELIDE_GLASS_CSS"].includes(message?.type)) return false;
+  if (!["HELIDE_STYLES_CONTEXT", "HELIDE_STYLES_CACHE", "HELIDE_STYLES_CSS"].includes(message?.type)) return false;
   (async () => {
     const target = targetFor(sender);
-    if (message.type !== "HELIDE_GLASS_CSS") {
+    if (message.type !== "HELIDE_STYLES_CSS") {
       await loaded;
       const site = S.siteKey(sender.tab.url), key = sender.tab.incognito ? null : await cacheKey(sender.url);
-      if (message.type === "HELIDE_GLASS_CONTEXT") {
+      if (message.type === "HELIDE_STYLES_CONTEXT") {
         const bootstrapCss = key && S.isEnabled(settings, site) ? C.css(entries[key], settings, message.mediaDark) : "";
         if (bootstrapCss) await chrome.scripting.insertCSS({ target, css: bootstrapCss, origin: "USER" });
         return { ok: true, site, settings, bootstrapCss, bootstrapSelectors: bootstrapCss ? entries[key].surfaces.map(surface => surface.selector) : [] };
